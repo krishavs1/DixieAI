@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Dixie AI",
+    "slug": "dixie-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dixieai.mobile"
+    },
+    "android": {
+      "package": "com.dixieai.mobile"
+    },
+    "web": {},
+    "scheme": "dixie-ai",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-font",
+      "expo-router",
+      "expo-web-browser"
+    ]
+  }
+}
