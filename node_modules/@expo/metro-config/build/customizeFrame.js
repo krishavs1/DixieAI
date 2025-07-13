@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDefaultCustomizeFrame = exports.INTERNAL_CALLSITES_REGEX = void 0;
+exports.INTERNAL_CALLSITES_REGEX = void 0;
+exports.getDefaultCustomizeFrame = getDefaultCustomizeFrame;
 const url_1 = require("url");
 // Import only the types here, the values will be imported from the project, at runtime.
 exports.INTERNAL_CALLSITES_REGEX = new RegExp([
@@ -39,8 +40,11 @@ exports.INTERNAL_CALLSITES_REGEX = new RegExp([
     'node_modules/require-from-string/.+\\.js$',
     // Block expo's metro-runtime
     '@expo/metro-runtime/.+\\.ts',
+    '@expo/server/.+\\.ts',
     // Block upstream metro-runtime
     '/metro-runtime/.+\\.js$',
+    // Expo's metro-runtime require patch:
+    '@expo/metro-config/require/.+',
     // Block all whatwg polyfills
     'node_modules/whatwg-.+\\.js$',
     // Hide expo-router warnings which are often wrapping all routes and imports.
@@ -51,6 +55,10 @@ exports.INTERNAL_CALLSITES_REGEX = new RegExp([
     '.+?ctx=[a-zA-Z0-9]+$',
     // Hide react-native-web warning wrappers. These are most likely related to style deprecations.
     '/react-native-web/dist/.+\\.js$',
+    // React Server Components adapter (note we should probably use an Expo-Metro-specific version in the future).
+    'node_modules/react-server-dom-webpack/.+\\.js$',
+    // Block all node modules.
+    'node_modules/.+/',
 ].join('|'));
 function isUrl(value) {
     try {
@@ -85,13 +93,34 @@ function getDefaultCustomizeFrame() {
             // Often this looks like: `__r(0);`.
             // The URL will also be unactionable in the app and therefore not very useful to the developer.
             if (frame.column === 3 &&
-                frame.methodName === 'global code' &&
+                frame.methodName &&
+                ['global', 'global code'].includes(frame.methodName) &&
                 frame.file?.match(/^https?:\/\//g)) {
+                collapse = true;
+            }
+            else if (frame.file === '<native>') {
+                collapse = true;
+            }
+            else if (
+            // Some internal component stacks often don't have a file name.
+            frame.file === '<anonymous>' &&
+                frame.methodName &&
+                [
+                    // React
+                    'Suspense',
+                    // React Native
+                    'RCTView',
+                    'RCTScrollView',
+                    'RCTScrollContentView',
+                    // React Native Screens
+                    'RNSScreen',
+                    'RNSScreenContentWrapper',
+                    'RNSScreenNavigationContainer',
+                ].includes(frame.methodName)) {
                 collapse = true;
             }
         }
         return { ...(frame || {}), collapse };
     };
 }
-exports.getDefaultCustomizeFrame = getDefaultCustomizeFrame;
 //# sourceMappingURL=customizeFrame.js.map

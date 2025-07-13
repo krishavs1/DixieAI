@@ -11,9 +11,8 @@ open class BaseExpoAppDelegateSubscriber: UIResponder {
   }
 
   #if os(macOS)
-  @available(*, unavailable)
   public required init?(coder: NSCoder) {
-    fatalError("init(coder:) has not been implemented")
+    super.init(coder: coder)
   }
   #endif // os(macOS)
 }
@@ -23,7 +22,9 @@ open class BaseExpoAppDelegateSubscriber: UIResponder {
  Might be useful for compatibility reasons if we decide to add more things here.
  */
 @objc(EXAppDelegateSubscriberProtocol)
-public protocol ExpoAppDelegateSubscriberProtocol: UIApplicationDelegate {}
+public protocol ExpoAppDelegateSubscriberProtocol: UIApplicationDelegate {
+  @objc optional func customizeRootView(_ rootView: UIView)
+}
 
 /**
  Typealias merging the base class for app delegate subscribers and protocol inheritance to `UIApplicationDelegate`.

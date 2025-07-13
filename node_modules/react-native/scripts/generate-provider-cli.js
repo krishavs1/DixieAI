@@ -9,18 +9,8 @@
 
 'use strict';
 
-let RNCodegen;
-try {
-  RNCodegen = require('../packages/react-native-codegen/lib/generators/RNCodegen.js');
-} catch (e) {
-  RNCodegen = require('@react-native/codegen/lib/generators/RNCodegen.js');
-  if (!RNCodegen) {
-    throw 'RNCodegen not found.';
-  }
-}
-
+const utils = require('./codegen/codegen-utils');
 const fs = require('fs');
-const mkdirp = require('mkdirp');
 const yargs = require('yargs');
 
 const argv = yargs
@@ -58,7 +48,7 @@ function generateProvider(platform, schemaListPath, outputDirectory) {
   if (!outputDirectory) {
     throw new Error('outputDir is required');
   }
-  mkdirp.sync(outputDirectory);
+  fs.mkdirSync(outputDirectory, {recursive: true});
 
   let schemaPaths;
   try {
@@ -81,7 +71,7 @@ function generateProvider(platform, schemaListPath, outputDirectory) {
     throw new Error(`Invalid platform type. ${platform}`);
   }
 
-  RNCodegen.generateFromSchemas(
+  utils.getCodegen().generateFromSchemas(
     {
       schemas,
       outputDirectory,

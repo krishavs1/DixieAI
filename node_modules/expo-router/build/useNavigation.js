@@ -1,71 +1,123 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+'use client';
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resolveParentId = exports.useNavigation = void 0;
+exports.useNavigation = useNavigation;
 const native_1 = require("@react-navigation/native");
-const react_1 = __importDefault(require("react"));
-const Route_1 = require("./Route");
-const matchers_1 = require("./matchers");
+const constants_1 = require("./constants");
+const href_1 = require("./link/href");
 /**
- * Return the navigation object for the current route.
- * @param parent Provide an absolute path like `/(root)` to the parent route or a relative path like `../../` to the parent route.
- * @returns the navigation object for the provided route.
+ * Returns the underlying React Navigation [`navigation` object](https://reactnavigation.org/docs/navigation-object)
+ * to imperatively access layout-specific functionality like `navigation.openDrawer()` in a
+ * [Drawer](/router/advanced/drawer/) layout.
+ *
+ * @example
+ * ```tsx app/index.tsx
+ * import { useNavigation } from 'expo-router';
+ *
+ * export default function Route() {
+ *   // Access the current navigation object for the current route.
+ *   const navigation = useNavigation();
+ *
+ *   return (
+ *     <View>
+ *       <Text onPress={() => {
+ *         // Open the drawer view.
+ *         navigation.openDrawer();
+ *       }}>
+ *         Open Drawer
+ *       </Text>
+ *     </View>
+ *   );
+ * }
+ * ```
+ *
+ * When using nested layouts, you can access higher-order layouts by passing a secondary argument denoting the layout route.
+ * For example, `/menu/_layout.tsx` is nested inside `/app/orders/`, you can use `useNavigation('/orders/menu/')`.
+ *
+ * @example
+ * ```tsx app/orders/menu/index.tsx
+ * import { useNavigation } from 'expo-router';
+ *
+ * export default function MenuRoute() {
+ *   const rootLayout = useNavigation('/');
+ *   const ordersLayout = useNavigation('/orders');
+ *
+ *   // Same as the default results of `useNavigation()` when invoked in this route.
+ *   const parentLayout = useNavigation('/orders/menu');
+ * }
+ * ```
+ *
+ * If you attempt to access a layout that doesn't exist, an error such as
+ * `Could not find parent navigation with route "/non-existent"` is thrown.
+ *
+ *
+ * @param parent Provide an absolute path such as `/(root)` to the parent route or a relative path like `../../` to the parent route.
+ * @returns The navigation object for the current route.
+ *
+ * @see React Navigation documentation on [navigation dependent functions](https://reactnavigation.org/docs/navigation-object/#navigator-dependent-functions)
+ * for more information.
  */
 function useNavigation(parent) {
-    const navigation = (0, native_1.useNavigation)();
-    const contextKey = (0, Route_1.useContextKey)();
-    const normalizedParent = react_1.default.useMemo(() => {
-        if (!parent) {
-            return null;
+    let navigation = (0, native_1.useNavigation)();
+    let state = (0, native_1.useStateForPath)();
+    if (parent === undefined) {
+        // If no parent is provided, return the current navigation object
+        return navigation;
+    }
+    // Check for the top-level navigator - we cannot fetch anything higher!
+    const currentId = navigation.getId();
+    if (currentId === '' || currentId === `/expo-router/build/views/Navigator`) {
+        return navigation;
+    }
+    if (typeof parent === 'object') {
+        parent = (0, href_1.resolveHref)(parent);
+    }
+    if (parent === '/') {
+        // This is the root navigator
+        return navigation.getParent(`/expo-router/build/views/Navigator`) ?? navigation.getParent(``);
+    }
+    else if (parent?.startsWith('../')) {
+        const names = [];
+        while (state) {
+            const route = state.routes[0];
+            state = route.state;
+            // Don't include the last router, as thats the current route
+            if (state) {
+                names.push(route.name);
+            }
         }
-        const normalized = (0, matchers_1.getNameFromFilePath)(parent);
-        if (parent.startsWith('.')) {
-            return relativePaths(contextKey, parent);
+        // Removing the trailing slash to make splitting easier
+        const originalParent = parent;
+        if (parent.endsWith('/')) {
+            parent = parent.slice(0, -1);
         }
-        return normalized;
-    }, [contextKey, parent]);
-    if (normalizedParent != null) {
-        const parentNavigation = navigation.getParent(normalizedParent);
-        // TODO: Maybe print a list of parents...
-        if (!parentNavigation) {
-            throw new Error(`Could not find parent navigation with route "${parent}".` +
-                (normalizedParent !== parent ? ` (normalized: ${normalizedParent})` : ''));
+        const segments = parent.split('/');
+        if (!segments.every((segment) => segment === '..')) {
+            throw new Error(`Invalid parent path "${originalParent}". Only "../" segments are allowed when using relative paths.`);
         }
-        return parentNavigation;
+        const levels = segments.length;
+        const index = names.length - 1 - levels;
+        if (index < 0) {
+            throw new Error(`Invalid parent path "${originalParent}". Cannot go up ${levels} levels from the current route.`);
+        }
+        parent = names[index];
+        // Expo Router navigators use the context key as the name which has a leading `/`
+        // The exception to this is the INTERNAL_SLOT_NAME, and the root navigator which uses ''
+        if (parent && parent !== constants_1.INTERNAL_SLOT_NAME) {
+            parent = `/${parent}`;
+        }
+    }
+    navigation = navigation.getParent(parent);
+    if (process.env.NODE_ENV !== 'production') {
+        if (!navigation) {
+            const ids = [];
+            while (navigation) {
+                ids.push(navigation.getId() || '/');
+                navigation = navigation.getParent();
+            }
+            throw new Error(`Could not find parent navigation with route "${parent}". Available routes are: '${ids.join("', '")}'`);
+        }
     }
     return navigation;
-}
-exports.useNavigation = useNavigation;
-function resolveParentId(contextKey, parentId) {
-    if (!parentId) {
-        return null;
-    }
-    if (parentId.startsWith('.')) {
-        return (0, matchers_1.getNameFromFilePath)(relativePaths(contextKey, parentId));
-    }
-    return (0, matchers_1.getNameFromFilePath)(parentId);
-}
-exports.resolveParentId = resolveParentId;
-// Resolve a path like `../` relative to a path like `/foo/bar`
-function relativePaths(from, to) {
-    const fromParts = from.split('/').filter(Boolean);
-    const toParts = to.split('/').filter(Boolean);
-    for (const part of toParts) {
-        if (part === '..') {
-            if (fromParts.length === 0) {
-                throw new Error(`Cannot resolve path "${to}" relative to "${from}"`);
-            }
-            fromParts.pop();
-        }
-        else if (part === '.') {
-            // Ignore
-        }
-        else {
-            fromParts.push(part);
-        }
-    }
-    return '/' + fromParts.join('/');
 }
 //# sourceMappingURL=useNavigation.js.map

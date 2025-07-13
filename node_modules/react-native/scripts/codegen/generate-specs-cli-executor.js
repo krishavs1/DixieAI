@@ -9,11 +9,9 @@
 
 'use strict';
 
-const fs = require('fs');
-const mkdirp = require('mkdirp');
-const path = require('path');
 const utils = require('./codegen-utils');
-const RNCodegen = utils.getCodegen();
+const fs = require('fs');
+const path = require('path');
 
 const GENERATORS = {
   all: {
@@ -34,13 +32,7 @@ function createOutputDirectoryIfNeeded(outputDirectory, libraryName) {
   if (!outputDirectory) {
     outputDirectory = path.resolve(__dirname, '..', 'Libraries', libraryName);
   }
-  mkdirp.sync(outputDirectory);
-}
-
-function createFolderIfDefined(folder) {
-  if (folder) {
-    mkdirp.sync(folder);
-  }
+  fs.mkdirSync(outputDirectory, {recursive: true});
 }
 
 /**
@@ -71,35 +63,25 @@ function validateLibraryType(libraryType) {
   }
 }
 
-function generateSpec(
+function generateSpecFromInMemorySchema(
   platform,
-  schemaPath,
+  schema,
   outputDirectory,
   libraryName,
   packageName,
   libraryType,
+  useLocalIncludePaths,
 ) {
   validateLibraryType(libraryType);
-
-  let schema = readAndParseSchema(schemaPath);
-
   createOutputDirectoryIfNeeded(outputDirectory, libraryName);
-  function composePath(intermediate) {
-    return path.join(outputDirectory, intermediate, libraryName);
-  }
-
-  // These are hardcoded and should not be changed.
-  // The codegen creates some C++ code with #include directive
-  // which uses these paths. Those directive are not customizable yet.
-  createFolderIfDefined(composePath('react/renderer/components/'));
-  createFolderIfDefined(composePath('./'));
-
-  RNCodegen.generate(
+  utils.getCodegen().generate(
     {
       libraryName,
       schema,
       outputDirectory,
       packageName,
+      assumeNonnull: platform === 'ios',
+      useLocalIncludePaths,
     },
     {
       generators: GENERATORS[libraryType][platform],
@@ -113,7 +95,7 @@ function generateSpec(
     // * this subdir structure is Android-only, not applicable to iOS
     const files = fs.readdirSync(outputDirectory);
     const jniOutputDirectory = `${outputDirectory}/jni/react/renderer/components/${libraryName}`;
-    mkdirp.sync(jniOutputDirectory);
+    fs.mkdirSync(jniOutputDirectory, {recursive: true});
     files
       .filter(f => f.endsWith('.h') || f.endsWith('.cpp'))
       .forEach(f => {
@@ -122,6 +104,25 @@ function generateSpec(
   }
 }
 
+function generateSpec(
+  platform,
+  schemaPath,
+  outputDirectory,
+  libraryName,
+  packageName,
+  libraryType,
+) {
+  generateSpecFromInMemorySchema(
+    platform,
+    readAndParseSchema(schemaPath),
+    outputDirectory,
+    libraryName,
+    packageName,
+    libraryType,
+  );
+}
+
 module.exports = {
   execute: generateSpec,
+  generateSpecFromInMemorySchema: generateSpecFromInMemorySchema,
 };

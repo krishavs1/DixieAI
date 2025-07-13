@@ -20,6 +20,7 @@ object ModulePriorities {
     // {key} to {value}
     // key: full qualified class name
     // value: priority value, the higher value takes precedence
+    "host.exp.exponent.experience.splashscreen.legacy.SplashScreenPackage" to 11,
     "expo.modules.updates.UpdatesPackage" to 10
   )
 }

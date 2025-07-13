@@ -20,23 +20,21 @@ enum class Unit : uint8_t {
   Point = YGUnitPoint,
   Percent = YGUnitPercent,
   Auto = YGUnitAuto,
+  MaxContent = YGUnitMaxContent,
+  FitContent = YGUnitFitContent,
+  Stretch = YGUnitStretch,
 };
 
 template <>
-constexpr inline int32_t ordinalCount<Unit>() {
-  return 4;
-} 
+constexpr int32_t ordinalCount<Unit>() {
+  return 7;
+}
 
-template <>
-constexpr inline int32_t bitCount<Unit>() {
-  return 2;
-} 
-
-constexpr inline Unit scopedEnum(YGUnit unscoped) {
+constexpr Unit scopedEnum(YGUnit unscoped) {
   return static_cast<Unit>(unscoped);
 }
 
-constexpr inline YGUnit unscopedEnum(Unit scoped) {
+constexpr YGUnit unscopedEnum(Unit scoped) {
   return static_cast<YGUnit>(scoped);
 }
 

@@ -48,6 +48,7 @@ module.exports = {
     'valid-typeof': 'error',
     'import/first': 'warn', //keep
     'import/default': 'off',
+    'no-var': 'error',
   },
   settings: {
     'import/extensions': jsExtensions,
@@ -58,7 +59,7 @@ module.exports = {
     ],
     'import/resolver': {
       node: { extensions: jsExtensions },
-      typescript: true
+      typescript: true,
     },
   },
   overrides: [
@@ -66,6 +67,12 @@ module.exports = {
       files: ['*.d.ts'],
       rules: {
         'import/order': 'off',
+      },
+    },
+    {
+      files: ['metro.config.js'],
+      env: {
+        node: true,
       },
     },
   ],

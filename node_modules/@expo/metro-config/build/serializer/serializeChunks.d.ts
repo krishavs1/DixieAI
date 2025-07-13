@@ -7,6 +7,7 @@ type Serializer = NonNullable<ConfigT['serializer']['customSerializer']>;
 type SerializerParameters = Parameters<Serializer>;
 export type SerializeChunkOptions = {
     includeSourceMaps: boolean;
+    splitChunks: boolean;
 } & SerializerConfigOptions;
 export declare function graphToSerialAssetsAsync(config: MetroConfig, serializeChunkOptions: SerializeChunkOptions, ...props: SerializerParameters): Promise<{
     artifacts: SerialAsset[] | null;
@@ -19,10 +20,11 @@ export declare class Chunk {
     options: ExpoSerializerOptions;
     isAsync: boolean;
     isVendor: boolean;
+    isEntry: boolean;
     deps: Set<Module>;
     preModules: Set<Module>;
     requiredChunks: Set<Chunk>;
-    constructor(name: string, entries: Module<MixedOutput>[], graph: ReadOnlyGraph<MixedOutput>, options: ExpoSerializerOptions, isAsync?: boolean, isVendor?: boolean);
+    constructor(name: string, entries: Module<MixedOutput>[], graph: ReadOnlyGraph<MixedOutput>, options: ExpoSerializerOptions, isAsync?: boolean, isVendor?: boolean, isEntry?: boolean);
     private getPlatform;
     private getFilename;
     private getStableChunkSource;

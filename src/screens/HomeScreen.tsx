@@ -7,55 +7,61 @@ import {
   TouchableOpacity,
   TextInput,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuthStore } from '../store/authStore';
-
-// Mock data for now
-const mockThreads = [
-  {
-    id: '1',
-    subject: 'Meeting tomorrow at 2 PM',
-    from: 'john@company.com',
-    snippet: 'Hey, just confirming our meeting tomorrow at 2 PM in the conference room...',
-    timestamp: '2h ago',
-    isUnread: true,
-  },
-  {
-    id: '2',
-    subject: 'Project update required',
-    from: 'sarah@company.com',
-    snippet: 'Hi team, we need to update the project timeline based on the new requirements...',
-    timestamp: '4h ago',
-    isUnread: false,
-  },
-  {
-    id: '3',
-    subject: 'Invoice #12345',
-    from: 'billing@service.com',
-    snippet: 'Your monthly invoice is ready. Please find the details attached...',
-    timestamp: '1d ago',
-    isUnread: true,
-  },
-];
+import { useEmailThreads, useSearchEmails, EmailThread } from '../services/emailService';
+import { showMessage } from 'react-native-flash-message';
 
 const HomeScreen = () => {
   const navigation = useNavigation();
   const { user, logout } = useAuthStore();
   const [searchQuery, setSearchQuery] = useState('');
-  const [threads] = useState(mockThreads);
+  const [isSearching, setIsSearching] = useState(false);
 
-  const handleThreadPress = (thread: any) => {
-    navigation.navigate('Chat', { threadId: thread.id, thread });
+  // Fetch email threads
+  const { 
+    data: threads = [], 
+    isLoading, 
+    error, 
+    refetch 
+  } = useEmailThreads();
+
+  // Search emails
+  const { 
+    data: searchResults = [], 
+    isLoading: isSearchLoading 
+  } = useSearchEmails(searchQuery);
+
+  // Use search results if searching, otherwise use regular threads
+  const displayThreads = isSearching ? searchResults : threads;
+
+  const handleThreadPress = (thread: EmailThread) => {
+    (navigation as any).navigate('Chat', { threadId: thread.id, thread });
   };
 
   const handleVoiceCommand = () => {
     // TODO: Implement voice command functionality
     console.log('Voice command pressed');
+    showMessage({
+      message: 'Voice commands coming soon!',
+      type: 'info',
+    });
   };
 
-  const renderThread = ({ item }: { item: any }) => (
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setIsSearching(query.length > 2);
+  };
+
+  const handleRefresh = () => {
+    refetch();
+  };
+
+  const renderThread = ({ item }: { item: EmailThread }) => (
     <TouchableOpacity
       style={[styles.threadItem, item.isUnread && styles.unreadThread]}
       onPress={() => handleThreadPress(item)}
@@ -64,7 +70,7 @@ const HomeScreen = () => {
         <Text style={styles.threadFrom} numberOfLines={1}>
           {item.from}
         </Text>
-        <Text style={styles.threadTime}>{item.timestamp}</Text>
+        <Text style={styles.threadTime}>{item.timestamp || item.date}</Text>
       </View>
       <Text style={styles.threadSubject} numberOfLines={1}>
         {item.subject}
@@ -74,6 +80,52 @@ const HomeScreen = () => {
       </Text>
     </TouchableOpacity>
   );
+
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="mail-outline" size={64} color="#D1D5DB" />
+      <Text style={styles.emptyTitle}>
+        {isSearching ? 'No search results' : 'No emails found'}
+      </Text>
+      <Text style={styles.emptySubtitle}>
+        {isSearching 
+          ? 'Try a different search term' 
+          : 'Check your internet connection and try again'
+        }
+      </Text>
+    </View>
+  );
+
+  const renderError = () => (
+    <View style={styles.errorContainer}>
+      <Ionicons name="warning-outline" size={64} color="#EF4444" />
+      <Text style={styles.errorTitle}>Unable to load emails</Text>
+      <Text style={styles.errorSubtitle}>
+        Please check your internet connection and try again
+      </Text>
+      <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
+        <Text style={styles.retryButtonText}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (error && !threads.length) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <Text style={styles.welcomeText}>
+              Welcome back, {user?.name?.split(' ')[0]}!
+            </Text>
+            <TouchableOpacity onPress={logout} style={styles.logoutButton}>
+              <Ionicons name="exit-outline" size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+        </View>
+        {renderError()}
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -93,7 +145,7 @@ const HomeScreen = () => {
             style={styles.searchInput}
             placeholder="Ask Dixie anything about your emails..."
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={handleSearch}
             placeholderTextColor="#9CA3AF"
           />
           <TouchableOpacity onPress={handleVoiceCommand} style={styles.voiceButton}>
@@ -105,7 +157,9 @@ const HomeScreen = () => {
       <View style={styles.quickActions}>
         <TouchableOpacity style={styles.actionButton}>
           <Ionicons name="mail-unread" size={16} color="#4285F4" />
-          <Text style={styles.actionText}>Unread (2)</Text>
+          <Text style={styles.actionText}>
+            Unread ({threads.filter((t: EmailThread) => t.isUnread).length})
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionButton}>
           <Ionicons name="star" size={16} color="#F59E0B" />
@@ -117,13 +171,31 @@ const HomeScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={threads}
-        renderItem={renderThread}
-        keyExtractor={(item) => item.id}
-        style={styles.threadsList}
-        showsVerticalScrollIndicator={false}
-      />
+      {isLoading && !threads.length ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4285F4" />
+          <Text style={styles.loadingText}>Loading your emails...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={displayThreads}
+          renderItem={renderThread}
+          keyExtractor={(item) => item.id}
+          style={styles.threadsList}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} />
+          }
+          ListEmptyComponent={renderEmpty}
+        />
+      )}
+
+      {(isSearchLoading && isSearching) && (
+        <View style={styles.searchLoadingContainer}>
+          <ActivityIndicator size="small" color="#4285F4" />
+          <Text style={styles.searchLoadingText}>Searching...</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -229,6 +301,86 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     lineHeight: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 12,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorSubtitle: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: '#4285F4',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  searchLoadingContainer: {
+    position: 'absolute',
+    top: 120,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  searchLoadingText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 6,
   },
 });
 

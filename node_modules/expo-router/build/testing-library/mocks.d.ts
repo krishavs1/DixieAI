@@ -1,2 +1,2 @@
-export declare function setInitialUrl(value: string): void;
+export {};
 //# sourceMappingURL=mocks.d.ts.map

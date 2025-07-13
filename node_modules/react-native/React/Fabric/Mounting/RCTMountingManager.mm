@@ -14,13 +14,11 @@
 #import <React/RCTFollyConvert.h>
 #import <React/RCTLog.h>
 #import <React/RCTUtils.h>
-#import <react/config/ReactNativeConfig.h>
+#import <cxxreact/TraceSection.h>
 #import <react/renderer/components/root/RootShadowNode.h>
 #import <react/renderer/core/LayoutableShadowNode.h>
 #import <react/renderer/core/RawProps.h>
-#import <react/renderer/debug/SystraceSection.h>
 #import <react/renderer/mounting/TelemetryController.h>
-#import <react/utils/CoreFeatures.h>
 
 #import <React/RCTComponentViewProtocol.h>
 #import <React/RCTComponentViewRegistry.h>
@@ -47,7 +45,7 @@ static void RCTPerformMountInstructions(
     RCTMountingTransactionObserverCoordinator &observerCoordinator,
     SurfaceId surfaceId)
 {
-  SystraceSection s("RCTPerformMountInstructions");
+  TraceSection s("RCTPerformMountInstructions");
 
   for (const auto &mutation : mutations) {
     switch (mutation.type) {
@@ -73,21 +71,19 @@ static void RCTPerformMountInstructions(
       }
 
       case ShadowViewMutation::Insert: {
-        auto &oldChildShadowView = mutation.oldChildShadowView;
         auto &newChildShadowView = mutation.newChildShadowView;
-        auto &parentShadowView = mutation.parentShadowView;
         auto &newChildViewDescriptor = [registry componentViewDescriptorWithTag:newChildShadowView.tag];
-        auto &parentViewDescriptor = [registry componentViewDescriptorWithTag:parentShadowView.tag];
+        auto &parentViewDescriptor = [registry componentViewDescriptorWithTag:mutation.parentTag];
 
         UIView<RCTComponentViewProtocol> *newChildComponentView = newChildViewDescriptor.view;
 
         RCTAssert(newChildShadowView.props, @"`newChildShadowView.props` must not be null.");
 
-        [newChildComponentView updateProps:newChildShadowView.props oldProps:oldChildShadowView.props];
+        [newChildComponentView updateProps:newChildShadowView.props oldProps:nullptr];
         [newChildComponentView updateEventEmitter:newChildShadowView.eventEmitter];
-        [newChildComponentView updateState:newChildShadowView.state oldState:oldChildShadowView.state];
+        [newChildComponentView updateState:newChildShadowView.state oldState:nullptr];
         [newChildComponentView updateLayoutMetrics:newChildShadowView.layoutMetrics
-                                  oldLayoutMetrics:oldChildShadowView.layoutMetrics];
+                                  oldLayoutMetrics:EmptyLayoutMetrics];
         [newChildComponentView finalizeUpdates:RNComponentViewUpdateMaskAll];
 
         [parentViewDescriptor.view mountChildComponentView:newChildComponentView index:mutation.index];
@@ -96,15 +92,9 @@ static void RCTPerformMountInstructions(
 
       case ShadowViewMutation::Remove: {
         auto &oldChildShadowView = mutation.oldChildShadowView;
-        auto &parentShadowView = mutation.parentShadowView;
         auto &oldChildViewDescriptor = [registry componentViewDescriptorWithTag:oldChildShadowView.tag];
-        auto &parentViewDescriptor = [registry componentViewDescriptorWithTag:parentShadowView.tag];
+        auto &parentViewDescriptor = [registry componentViewDescriptorWithTag:mutation.parentTag];
         [parentViewDescriptor.view unmountChildComponentView:oldChildViewDescriptor.view index:mutation.index];
-        break;
-      }
-
-      case ShadowViewMutation::RemoveDeleteTree: {
-        // TODO - not supported yet
         break;
       }
 
@@ -193,7 +183,7 @@ static void RCTPerformMountInstructions(
                                           componentViewDescriptor:rootViewDescriptor];
 }
 
-- (void)scheduleTransaction:(MountingCoordinator::Shared)mountingCoordinator
+- (void)scheduleTransaction:(std::shared_ptr<const MountingCoordinator>)mountingCoordinator
 {
   if (RCTIsMainQueue()) {
     // Already on the proper thread, so:
@@ -242,7 +232,7 @@ static void RCTPerformMountInstructions(
 
 - (void)initiateTransaction:(const MountingCoordinator &)mountingCoordinator
 {
-  SystraceSection s("-[RCTMountingManager initiateTransaction:]");
+  TraceSection s("-[RCTMountingManager initiateTransaction:]");
   RCTAssertMainQueue();
 
   if (_transactionInFlight) {
@@ -260,7 +250,7 @@ static void RCTPerformMountInstructions(
 
 - (void)performTransaction:(const MountingCoordinator &)mountingCoordinator
 {
-  SystraceSection s("-[RCTMountingManager performTransaction:]");
+  TraceSection s("-[RCTMountingManager performTransaction:]");
   RCTAssertMainQueue();
 
   auto surfaceId = mountingCoordinator.getSurfaceId();

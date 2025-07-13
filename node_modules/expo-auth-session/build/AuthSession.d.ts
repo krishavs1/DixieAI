@@ -1,14 +1,13 @@
 import * as Linking from 'expo-linking';
 import { AuthRequest } from './AuthRequest';
-import { AuthRequestConfig, AuthRequestPromptOptions, CodeChallengeMethod, Prompt, ResponseType } from './AuthRequest.types';
-import { AuthSessionOptions, AuthSessionRedirectUriOptions, AuthSessionResult } from './AuthSession.types';
-import { DiscoveryDocument, fetchDiscoveryAsync, Issuer, IssuerOrDiscovery, ProviderMetadata, resolveDiscoveryAsync } from './Discovery';
-import { generateHexStringAsync } from './PKCE';
+import { AuthRequestConfig } from './AuthRequest.types';
+import { AuthSessionRedirectUriOptions } from './AuthSession.types';
+import { IssuerOrDiscovery } from './Discovery';
 /**
  * Cancels an active `AuthSession` if there is one.
  */
 export declare function dismiss(): void;
-export declare const getDefaultReturnUrl: (urlPath?: string | undefined, options?: Omit<Linking.CreateURLOptions, "queryParams"> | undefined) => string;
+export declare const getDefaultReturnUrl: (urlPath?: string, options?: Omit<Linking.CreateURLOptions, "queryParams">) => string;
 /**
  * Get the URL that your authentication provider needs to redirect to. For example: `https://auth.expo.io/@your-username/your-app-slug`. You can pass an additional path component to be appended to the default redirect URL.
  * > **Note** This method will throw an exception if you're using the bare workflow on native.
@@ -69,11 +68,4 @@ export declare function makeRedirectUri({ native, scheme, isTripleSlashed, query
  * @return Returns an instance of `AuthRequest` that can be used to prompt the user for authorization.
  */
 export declare function loadAsync(config: AuthRequestConfig, issuerOrDiscovery: IssuerOrDiscovery): Promise<AuthRequest>;
-export { useAutoDiscovery, useAuthRequest } from './AuthRequestHooks';
-export { AuthError, TokenError } from './Errors';
-export { AuthSessionOptions, AuthSessionRedirectUriOptions, AuthSessionResult, AuthRequest, AuthRequestConfig, AuthRequestPromptOptions, CodeChallengeMethod, DiscoveryDocument, Issuer, IssuerOrDiscovery, Prompt, ProviderMetadata, ResponseType, resolveDiscoveryAsync, fetchDiscoveryAsync, generateHexStringAsync, };
-export { TokenResponse, AccessTokenRequest, RefreshTokenRequest, RevokeTokenRequest, revokeAsync, refreshAsync, exchangeCodeAsync, fetchUserInfoAsync, } from './TokenRequest';
-export * from './TokenRequest.types';
-export { GoogleAuthRequestConfig } from './providers/Google';
-export { FacebookAuthRequestConfig } from './providers/Facebook';
 //# sourceMappingURL=AuthSession.d.ts.map

@@ -4,20 +4,16 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.uimanager.ViewManager
 import expo.modules.adapters.react.NativeModulesProxy
-import expo.modules.kotlin.views.ViewManagerType
-import expo.modules.kotlin.defaultmodules.NativeModulesProxyModuleName
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.exception.UnexpectedException
+import expo.modules.kotlin.modules.DEFAULT_MODULE_VIEW
 import expo.modules.kotlin.tracing.trace
 import expo.modules.kotlin.views.GroupViewManagerWrapper
 import expo.modules.kotlin.views.SimpleViewManagerWrapper
+import expo.modules.kotlin.views.ViewManagerType
 import expo.modules.kotlin.views.ViewManagerWrapperDelegate
 import expo.modules.kotlin.views.ViewWrapperDelegateHolder
 import java.lang.ref.WeakReference
-
-private typealias ModuleName = String
-private typealias ModuleConstants = Map<String, Any?>
-private typealias ModuleMethodInfo = Map<String, Any?>
 
 class KotlinInteropModuleRegistry(
   modulesProvider: ModulesProvider,
@@ -27,7 +23,7 @@ class KotlinInteropModuleRegistry(
   val appContext = AppContext(modulesProvider, legacyModuleRegistry, reactContext)
 
   private val registry: ModuleRegistry
-    get() = appContext.registry
+    get() = appContext.hostingRuntimeContext.registry
 
   fun hasModule(name: String): Boolean = registry.hasModule(name)
 
@@ -36,7 +32,7 @@ class KotlinInteropModuleRegistry(
       requireNotNull(
         registry.getModuleHolder(moduleName)
       ) { "Trying to call '$method' on the non-existing module '$moduleName'" }
-        .call(method, arguments, promise)
+        .call(method, arguments.toArrayList().toArray(), promise)
     } catch (e: CodedException) {
       promise.reject(e)
     } catch (e: Throwable) {
@@ -44,55 +40,34 @@ class KotlinInteropModuleRegistry(
     }
   }
 
-  fun exportedModulesConstants(): Map<ModuleName, ModuleConstants> =
-    trace("KotlinInteropModuleRegistry.exportedModulesConstants") {
-      registry
-        // prevent infinite recursion - exclude NativeProxyModule constants
-        .filter { holder -> holder.name != NativeModulesProxyModuleName }
-        .associate { holder ->
-          holder.name to holder.definition.constantsProvider()
-        }
-    }
-
-  fun exportMethods(exportKey: (String, List<ModuleMethodInfo>) -> Unit = { _, _ -> }): Map<ModuleName, List<ModuleMethodInfo>> =
-    trace("KotlinInteropModuleRegistry.exportMethods") {
-      registry.associate { holder ->
-        val methodsInfo = holder
-          .definition
-          .asyncFunctions
-          .map { (name, method) ->
-            mapOf(
-              "name" to name,
-              "argumentsCount" to method.argsCount
-            )
-          }
-        exportKey(holder.name, methodsInfo)
-        holder.name to methodsInfo
-      }
-    }
-
   fun exportViewManagers(): List<ViewManager<*, *>> =
     trace("KotlinInteropModuleRegistry.exportViewManagers") {
       registry
-        .filter { it.definition.viewManagerDefinition != null }
-        .map {
-          val wrapperDelegate = ViewManagerWrapperDelegate(it)
-          when (it.definition.viewManagerDefinition!!.getViewManagerType()) {
-            ViewManagerType.SIMPLE -> SimpleViewManagerWrapper(wrapperDelegate)
-            ViewManagerType.GROUP -> GroupViewManagerWrapper(wrapperDelegate)
+        .flatMap { module ->
+          module.definition.viewManagerDefinitions.map { (name, definition) ->
+            val wrapperDelegate = ViewManagerWrapperDelegate(module, definition, if (name == DEFAULT_MODULE_VIEW) module.name else null)
+            when (definition.getViewManagerType()) {
+              ViewManagerType.SIMPLE -> SimpleViewManagerWrapper(wrapperDelegate)
+              ViewManagerType.GROUP -> GroupViewManagerWrapper(wrapperDelegate)
+            }
           }
         }
     }
 
   fun viewManagersMetadata(): Map<String, Map<String, Any>> =
     trace("KotlinInteropModuleRegistry.viewManagersMetadata") {
-      registry
-        .filter { it.definition.viewManagerDefinition != null }
-        .associate { holder ->
-          holder.name to mapOf(
-            "propsNames" to (holder.definition.viewManagerDefinition?.propsNames ?: emptyList())
-          )
+      val result = registry.flatMap { module ->
+        module.definition.viewManagerDefinitions.map { (name, definition) ->
+          val viewName = if (name == DEFAULT_MODULE_VIEW) {
+            module.name
+          } else {
+            "${module.name}_$name"
+          }
+
+          viewName to mapOf("propsNames" to definition.propsNames)
         }
+      }.toMap()
+      return@trace result
     }
 
   fun extractViewManagersDelegateHolders(viewManagers: List<ViewManager<*, *>>): List<ViewWrapperDelegateHolder> =

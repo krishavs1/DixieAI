@@ -10,7 +10,8 @@
 
 'use strict';
 
-import type {SyntheticEvent} from './CoreEventTypes';
+import type {EventSubscription} from '../vendor/emitter/EventEmitter';
+import type {NativeSyntheticEvent} from './CoreEventTypes';
 
 // Event types
 // We're not using the PaperName, it is only used to codegen view config settings
@@ -18,17 +19,18 @@ import type {SyntheticEvent} from './CoreEventTypes';
 export type BubblingEventHandler<
   T,
   PaperName: string | empty = empty, // eslint-disable-line no-unused-vars
-> = (event: SyntheticEvent<T>) => void | Promise<void>;
+> = (event: NativeSyntheticEvent<T>) => void | Promise<void>;
 export type DirectEventHandler<
   T,
   PaperName: string | empty = empty, // eslint-disable-line no-unused-vars
-> = (event: SyntheticEvent<T>) => void | Promise<void>;
+> = (event: NativeSyntheticEvent<T>) => void | Promise<void>;
 
 // Prop types
 export type Double = number;
 export type Float = number;
 export type Int32 = number;
-export type UnsafeObject = $FlowFixMe; // Object is forbidden in strict mode
+/* $FlowFixMe[unclear-type] Object is forbidden in strict mode */
+export type UnsafeObject = Object;
 export type UnsafeMixed = mixed;
 
 type DefaultTypes = number | boolean | string | $ReadOnlyArray<string>;
@@ -40,3 +42,7 @@ type DefaultTypes = number | boolean | string | $ReadOnlyArray<string>;
 //
 // eslint-disable-next-line no-unused-vars
 export type WithDefault<Type: DefaultTypes, Value: ?Type | string> = ?Type;
+
+export type EventEmitter<T> = (
+  handler: (T) => void | Promise<void>,
+) => EventSubscription;

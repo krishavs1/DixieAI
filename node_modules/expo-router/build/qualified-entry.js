@@ -7,18 +7,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.App = void 0;
+exports.App = App;
 // This has to be the string "expo-router/_ctx" as we resolve the exact string to
 // a different file in a custom resolver for bundle splitting in Node.js.
 const _ctx_1 = require("expo-router/_ctx");
 const react_1 = __importDefault(require("react"));
 const ExpoRoot_1 = require("./ExpoRoot");
 const head_1 = require("./head");
+require("./fast-refresh");
 // Must be exported or Fast Refresh won't update the context
 function App() {
     return (<head_1.Head.Provider>
       <ExpoRoot_1.ExpoRoot context={_ctx_1.ctx}/>
     </head_1.Head.Provider>);
 }
-exports.App = App;
 //# sourceMappingURL=qualified-entry.js.map

@@ -1,9 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = useLinkToPathProps;
+exports.shouldHandleMouseEvent = shouldHandleMouseEvent;
 const react_native_1 = require("react-native");
-const getPathFromState_1 = require("../fork/getPathFromState");
-const router_store_1 = require("../global-state/router-store");
+const emitDomEvent_1 = require("../domComponents/emitDomEvent");
+const getPathFromState_forks_1 = require("../fork/getPathFromState-forks");
+const routing_1 = require("../global-state/routing");
 const matchers_1 = require("../matchers");
+const url_1 = require("../utils/url");
 function eventShouldPreventDefault(e) {
     if (e?.defaultPrevented) {
         return false;
@@ -23,27 +27,34 @@ function eventShouldPreventDefault(e) {
     }
     return false;
 }
-function useLinkToPathProps(props) {
-    const { linkTo } = (0, router_store_1.useExpoRouter)();
-    const onPress = (e) => {
-        let shouldHandle = false;
-        if (react_native_1.Platform.OS !== 'web' || !e) {
-            shouldHandle = e ? !e.defaultPrevented : true;
-        }
-        else if (eventShouldPreventDefault(e)) {
-            e.preventDefault();
-            shouldHandle = true;
-        }
-        if (shouldHandle) {
-            linkTo(props.href, props.event);
+function useLinkToPathProps({ href, ...options }) {
+    const onPress = (event) => {
+        if (shouldHandleMouseEvent(event)) {
+            if ((0, emitDomEvent_1.emitDomLinkEvent)(href, options)) {
+                return;
+            }
+            (0, routing_1.linkTo)(href, options);
         }
     };
+    let strippedHref = (0, matchers_1.stripGroupSegmentsFromPath)(href) || '/';
+    // Append base url only if needed.
+    if (!(0, url_1.shouldLinkExternally)(strippedHref)) {
+        strippedHref = (0, getPathFromState_forks_1.appendBaseUrl)(strippedHref);
+    }
     return {
-        // Ensure there's always a value for href. Manually append the baseUrl to the href prop that shows in the static HTML.
-        href: (0, getPathFromState_1.appendBaseUrl)((0, matchers_1.stripGroupSegmentsFromPath)(props.href) || '/'),
+        href: strippedHref,
         role: 'link',
         onPress,
     };
 }
-exports.default = useLinkToPathProps;
+function shouldHandleMouseEvent(event) {
+    if (react_native_1.Platform.OS !== 'web') {
+        return !event?.defaultPrevented;
+    }
+    if (event && eventShouldPreventDefault(event)) {
+        event.preventDefault();
+        return true;
+    }
+    return false;
+}
 //# sourceMappingURL=useLinkToPathProps.js.map

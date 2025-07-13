@@ -19,7 +19,13 @@ namespace facebook::react {
 enum class DisplayType {
   None = 0,
   Flex = 1,
-  Inline = 2,
+  Contents = 2,
+};
+
+enum class PositionType {
+  Static = 0,
+  Relative = 1,
+  Absolute = 2,
 };
 
 /*
@@ -32,20 +38,3 @@ enum class LayoutDirection {
 };
 
 } // namespace facebook::react
-
-namespace std {
-template <>
-struct hash<facebook::react::LayoutDirection> {
-  size_t operator()(const facebook::react::LayoutDirection& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::DisplayType> {
-  size_t operator()(const facebook::react::DisplayType& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-} // namespace std

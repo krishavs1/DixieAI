@@ -1,10 +1,26 @@
-import { findModulesAsync } from './findModules';
-import { mergeLinkingOptionsAsync, resolveSearchPathsAsync } from './mergeLinkingOptions';
-import { resolveModulesAsync } from './resolveModules';
-import type { ModuleDescriptor, SearchOptions } from '../types';
+import path from 'path';
 
-export { findModulesAsync, mergeLinkingOptionsAsync, resolveModulesAsync, resolveSearchPathsAsync };
-export { generatePackageListAsync } from './generatePackageList';
+import { findModulesAsync } from './findModules';
+import {
+  getProjectPackageJsonPathAsync,
+  getProjectPackageJsonPathSync,
+  mergeLinkingOptionsAsync,
+  resolveSearchPathsAsync,
+} from './mergeLinkingOptions';
+import { resolveExtraBuildDependenciesAsync, resolveModulesAsync } from './resolveModules';
+import type { ModuleDescriptor, SearchOptions } from '../types';
+import { getConfiguration } from './getConfiguration';
+
+export {
+  findModulesAsync,
+  getProjectPackageJsonPathAsync,
+  mergeLinkingOptionsAsync,
+  resolveExtraBuildDependenciesAsync,
+  resolveModulesAsync,
+  resolveSearchPathsAsync,
+  getConfiguration,
+};
+export { generateModulesProviderAsync, generatePackageListAsync } from './generatePackageList';
 export { verifySearchResults } from './verifySearchResults';
 export * from '../types';
 
@@ -19,4 +35,11 @@ export async function queryAutolinkingModulesFromProjectAsync(
   const linkOptions = await mergeLinkingOptionsAsync({ ...options, projectRoot, searchPaths });
   const searchResults = await findModulesAsync(linkOptions);
   return await resolveModulesAsync(searchResults, linkOptions);
+}
+
+/**
+ * Get the project root directory from the current working directory.
+ */
+export function findProjectRootSync(cwd: string = process.cwd()): string {
+  return path.dirname(getProjectPackageJsonPathSync(cwd));
 }

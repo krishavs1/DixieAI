@@ -19,6 +19,7 @@
 Class<RCTComponentViewProtocol> RCTFabricComponentsProvider(const char *name) {
   static std::unordered_map<std::string, Class (*)(void)> sFabricComponentsClassMap = {
     {"ActivityIndicatorView", RCTActivityIndicatorViewCls},
+    {"DebuggingOverlay", RCTDebuggingOverlayCls},
     {"InputAccessoryView", RCTInputAccessoryCls},
     {"Paragraph", RCTParagraphCls},
     {"PullToRefreshView", RCTPullToRefreshViewCls},
@@ -37,7 +38,7 @@ Class<RCTComponentViewProtocol> RCTFabricComponentsProvider(const char *name) {
     auto classFunc = p->second;
     return classFunc();
   }
-  return RCTThirdPartyFabricComponentsProvider(name);
+  return nullptr;
 }
 
 #endif // RN_DISABLE_OSS_PLUGIN_HEADER

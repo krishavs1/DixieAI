@@ -564,7 +564,7 @@ Create the file with the following content:
 
 #### `NATIVE` mode adjustments
 
-If you've overridden `<string name="expo_splash_screen_resize_mode">native</string>` mode in [`res/values/strings.xml`](#-optional-customize-resizemode), you shoulw add:
+If you've overridden `<string name="expo_splash_screen_resize_mode">native</string>` mode in [`res/values/strings.xml`](#-optional-customize-resizemode), you should add:
 
 ```diff
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
@@ -765,8 +765,8 @@ We try to keep changes backward compatible, the code for `expo-splash-screen` wi
  import com.facebook.react.ReactRootView;
  import com.swmansion.gesturehandler.react.RNGestureHandlerEnabledRootView;
 
--import expo.modules.splashscreen.singletons.SplashScreen;
--import expo.modules.splashscreen.SplashScreenImageResizeMode;
+-import host.exp.exponent.experience.splashscreen.legacy.singletons.SplashScreen;
+-import host.exp.exponent.experience.splashscreen.legacy.SplashScreenImageResizeMode;
 -
  public class MainActivity extends ReactActivity {
    @Override

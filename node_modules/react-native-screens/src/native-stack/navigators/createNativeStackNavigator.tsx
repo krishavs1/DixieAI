@@ -41,7 +41,7 @@ function NativeStackNavigator({
     // @ts-ignore navigation.dangerouslyGetParent was removed in v6
     if (navigation?.dangerouslyGetParent === undefined) {
       console.warn(
-        'Looks like you are importing `native-stack` from `react-native-screens/native-stack`. Since version 6 of `react-navigation`, it should be imported from `@react-navigation/native-stack`.'
+        'Looks like you are importing `native-stack` from `react-native-screens/native-stack`. Since version 6 of `react-navigation`, it should be imported from `@react-navigation/native-stack`.',
       );
     }
   }, [navigation]);
@@ -70,9 +70,9 @@ function NativeStackNavigator({
               });
             }
           });
-        }
+        },
       ),
-    [navigation, state.index, state.key]
+    [navigation, state.index, state.key],
   );
 
   return (
@@ -85,6 +85,9 @@ function NativeStackNavigator({
   );
 }
 
+/**
+ * @deprecated NativeStack has been moved from react-native-screens/native-stack to @react-navigation/native since version v6. With react-native-screens v4 native stack v5 (react-native-screens/native-stack) is deprecated and marked for removal in the upcoming minor release, react-native-screens v4 will support only @react-navigation/native-stack v7.
+ */
 export default createNavigatorFactory<
   StackNavigationState<ParamListBase>,
   NativeStackNavigationOptions,

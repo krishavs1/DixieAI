@@ -15,25 +15,8 @@ import SectionList from '../../Lists/SectionList';
 import createAnimatedComponent from '../createAnimatedComponent';
 import * as React from 'react';
 
-/**
- * @see https://github.com/facebook/react-native/commit/b8c8562
- */
-const SectionListWithEventThrottle = React.forwardRef(
-  // $FlowFixMe[incompatible-call]
-  (
-    props: React.ElementConfig<typeof SectionList>,
-    ref:
-      | ((null | SectionList<SectionBase<$FlowFixMe>>) => mixed)
-      | {
-          current: null | SectionList<SectionBase<$FlowFixMe>>,
-          ...
-        },
-  ) => <SectionList {...props} ref={ref} />,
-);
-
-export default (createAnimatedComponent(
-  SectionListWithEventThrottle,
-): AnimatedComponentType<
+export default (createAnimatedComponent(SectionList): AnimatedComponentType<
   React.ElementConfig<typeof SectionList>,
-  React.ElementRef<typeof SectionList>,
+  // $FlowExpectedError[unclear-type]
+  SectionList<SectionBase<any>>,
 >);

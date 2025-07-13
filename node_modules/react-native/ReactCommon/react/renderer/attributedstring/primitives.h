@@ -42,7 +42,27 @@ enum class FontVariant : int {
   OldstyleNums = 1 << 2,
   LiningNums = 1 << 3,
   TabularNums = 1 << 4,
-  ProportionalNums = 1 << 5
+  ProportionalNums = 1 << 5,
+  StylisticOne = 1 << 6,
+  StylisticTwo = 1 << 7,
+  StylisticThree = 1 << 8,
+  StylisticFour = 1 << 9,
+  StylisticFive = 1 << 10,
+  StylisticSix = 1 << 11,
+  StylisticSeven = 1 << 12,
+  StylisticEight = 1 << 13,
+  StylisticNine = 1 << 14,
+  StylisticTen = 1 << 15,
+  StylisticEleven = 1 << 16,
+  StylisticTwelve = 1 << 17,
+  StylisticThirteen = 1 << 18,
+  StylisticFourteen = 1 << 19,
+  StylisticFifteen = 1 << 20,
+  StylisticSixteen = 1 << 21,
+  StylisticSeventeen = 1 << 22,
+  StylisticEighteen = 1 << 23,
+  StylisticNineteen = 1 << 24,
+  StylisticTwenty = 1 << 25
 };
 
 enum class DynamicTypeRamp {
@@ -80,6 +100,13 @@ enum class TextAlignment {
   Justified // Fully-justified. The last line in a paragraph is natural-aligned.
 };
 
+enum class TextAlignmentVertical {
+  Auto,
+  Top,
+  Bottom,
+  Center,
+};
+
 enum class WritingDirection {
   Natural, // Determines direction using the Unicode Bidi Algorithm rules P2 and
            // P3.
@@ -94,6 +121,15 @@ enum class LineBreakStrategy {
                       // characters.
   Standard // Use the same configuration of line break strategies that the
            // system uses for standard UI labels.
+};
+
+enum class LineBreakMode {
+  Word, // Wrap at word boundaries, default
+  Char, // Wrap at character boundaries
+  Clip, // Simply clip
+  Head, // Truncate at head of line: "...wxyz"
+  Middle, // Truncate middle of line:  "ab...yz"
+  Tail // Truncate at tail of line: "abcd..."
 };
 
 enum class TextDecorationLineType {
@@ -120,89 +156,3 @@ enum class HyphenationFrequency {
 };
 
 } // namespace facebook::react
-
-namespace std {
-template <>
-struct hash<facebook::react::FontVariant> {
-  size_t operator()(const facebook::react::FontVariant& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::TextAlignment> {
-  size_t operator()(const facebook::react::TextAlignment& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::FontStyle> {
-  size_t operator()(const facebook::react::FontStyle& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::TextDecorationLineType> {
-  size_t operator()(const facebook::react::TextDecorationLineType& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::WritingDirection> {
-  size_t operator()(const facebook::react::WritingDirection& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::TextDecorationStyle> {
-  size_t operator()(const facebook::react::TextDecorationStyle& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::FontWeight> {
-  size_t operator()(const facebook::react::FontWeight& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::DynamicTypeRamp> {
-  size_t operator()(const facebook::react::DynamicTypeRamp& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::EllipsizeMode> {
-  size_t operator()(const facebook::react::EllipsizeMode& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::TextBreakStrategy> {
-  size_t operator()(const facebook::react::TextBreakStrategy& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::TextTransform> {
-  size_t operator()(const facebook::react::TextTransform& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-
-template <>
-struct hash<facebook::react::HyphenationFrequency> {
-  size_t operator()(const facebook::react::HyphenationFrequency& v) const {
-    return hash<int>()(static_cast<int>(v));
-  }
-};
-} // namespace std

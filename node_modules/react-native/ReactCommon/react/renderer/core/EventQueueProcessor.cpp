@@ -7,7 +7,7 @@
 
 #include <cxxreact/JSExecutor.h>
 #include <logger/react_native_log.h>
-#include <react/utils/CoreFeatures.h>
+#include <react/featureflags/ReactNativeFeatureFlags.h>
 #include "EventEmitter.h"
 #include "EventLogger.h"
 #include "EventQueue.h"
@@ -18,10 +18,12 @@ namespace facebook::react {
 EventQueueProcessor::EventQueueProcessor(
     EventPipe eventPipe,
     EventPipeConclusion eventPipeConclusion,
-    StatePipe statePipe)
+    StatePipe statePipe,
+    std::weak_ptr<EventLogger> eventLogger)
     : eventPipe_(std::move(eventPipe)),
       eventPipeConclusion_(std::move(eventPipeConclusion)),
-      statePipe_(std::move(statePipe)) {}
+      statePipe_(std::move(statePipe)),
+      eventLogger_(std::move(eventLogger)) {}
 
 void EventQueueProcessor::flushEvents(
     jsi::Runtime& runtime,
@@ -37,25 +39,48 @@ void EventQueueProcessor::flushEvents(
   }
 
   for (const auto& event : events) {
-    if (event.category == RawEvent::Category::ContinuousEnd) {
-      hasContinuousEventStarted_ = false;
+    auto reactPriority = ReactEventPriority::Default;
+
+    if (ReactNativeFeatureFlags::
+            fixMappingOfEventPrioritiesBetweenFabricAndReact()) {
+      reactPriority = [&]() {
+        switch (event.category) {
+          case RawEvent::Category::Discrete:
+            return ReactEventPriority::Discrete;
+          case RawEvent::Category::ContinuousStart:
+            hasContinuousEventStarted_ = true;
+            return ReactEventPriority::Discrete;
+          case RawEvent::Category::ContinuousEnd:
+            hasContinuousEventStarted_ = false;
+            return ReactEventPriority::Discrete;
+          case RawEvent::Category::Continuous:
+            return ReactEventPriority::Continuous;
+          case RawEvent::Category::Unspecified:
+            return hasContinuousEventStarted_ ? ReactEventPriority::Continuous
+                                              : ReactEventPriority::Default;
+        }
+        return ReactEventPriority::Default;
+      }();
+    } else {
+      if (event.category == RawEvent::Category::ContinuousEnd) {
+        hasContinuousEventStarted_ = false;
+      }
+
+      reactPriority = hasContinuousEventStarted_ ? ReactEventPriority::Default
+                                                 : ReactEventPriority::Discrete;
+
+      if (event.category == RawEvent::Category::Continuous) {
+        reactPriority = ReactEventPriority::Default;
+      }
+
+      if (event.category == RawEvent::Category::Discrete) {
+        reactPriority = ReactEventPriority::Discrete;
+      }
     }
 
-    auto reactPriority = hasContinuousEventStarted_
-        ? ReactEventPriority::Default
-        : ReactEventPriority::Discrete;
-
-    if (event.category == RawEvent::Category::Continuous) {
-      reactPriority = ReactEventPriority::Default;
-    }
-
-    if (event.category == RawEvent::Category::Discrete) {
-      reactPriority = ReactEventPriority::Discrete;
-    }
-
-    auto eventLogger = getEventLogger();
+    auto eventLogger = eventLogger_.lock();
     if (eventLogger != nullptr) {
-      eventLogger->onEventDispatch(event.loggingTag);
+      eventLogger->onEventProcessingStart(event.loggingTag);
     }
 
     if (event.eventPayload == nullptr) {
@@ -71,23 +96,17 @@ void EventQueueProcessor::flushEvents(
         reactPriority,
         *event.eventPayload);
 
-    // We run the "Conclusion" per-event when unbatched
-    if (!CoreFeatures::enableDefaultAsyncBatchedPriority) {
-      eventPipeConclusion_(runtime);
-    }
-
     if (eventLogger != nullptr) {
-      eventLogger->onEventEnd(event.loggingTag);
+      eventLogger->onEventProcessingEnd(event.loggingTag);
     }
 
     if (event.category == RawEvent::Category::ContinuousStart) {
       hasContinuousEventStarted_ = true;
     }
   }
+
   // We only run the "Conclusion" once per event group when batched.
-  if (CoreFeatures::enableDefaultAsyncBatchedPriority) {
-    eventPipeConclusion_(runtime);
-  }
+  eventPipeConclusion_(runtime);
 
   // No need to lock `EventEmitter::DispatchMutex()` here.
   // The mutex protects from a situation when the `instanceHandle` can be

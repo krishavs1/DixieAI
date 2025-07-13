@@ -10,11 +10,19 @@ Pod::Spec.new do |s|
   s.license        = package['license']
   s.author         = package['author']
   s.homepage       = package['homepage']
-  s.platform       = :ios, '13.4'
+  s.platforms      = {
+    :ios => '15.1'
+  }
   s.source         = { git: 'https://github.com/expo/expo.git' }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
+
+  # Swift/Objective-C compatibility
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'SWIFT_COMPILATION_MODE' => 'wholemodule'
+  }
 
   s.resource_bundles = {'ExpoNotifications_privacy' => ['PrivacyInfo.xcprivacy']}
 
@@ -22,6 +30,13 @@ Pod::Spec.new do |s|
     s.source_files = "#{s.name}/**/*.h"
     s.vendored_frameworks = "#{s.name}.xcframework"
   else
-    s.source_files = "#{s.name}/**/*.{h,m}"
+    s.source_files = "#{s.name}/**/*.{h,m,swift}"
+  end
+
+  s.exclude_files = 'Tests/'
+  s.test_spec 'Tests' do |test_spec|
+    test_spec.dependency 'ExpoModulesTestCore'
+
+    test_spec.source_files = "Tests/**/*.{m,mm,swift}"
   end
 end

@@ -10,174 +10,127 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import * as AuthSession from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { useAuthStore } from '../store/authStore';
+import { apiService } from '../services/api';
 import { showMessage } from 'react-native-flash-message';
-
-WebBrowser.maybeCompleteAuthSession();
+import { API_CONFIG } from '../config/api';
 
 const { width } = Dimensions.get('window');
 
 const LoginScreen = () => {
   const { login } = useAuthStore();
 
-  // Create the OAuth request
-  const discovery = {
-    authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-    tokenEndpoint: 'https://oauth2.googleapis.com/token',
-    revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
-  };
-
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: 'YOUR_GOOGLE_CLIENT_ID', // TODO: Replace with your actual client ID
-      scopes: [
-        'openid',
-        'profile',
-        'email',
-        'https://www.googleapis.com/auth/gmail.readonly',
-        'https://www.googleapis.com/auth/gmail.compose',
-        'https://www.googleapis.com/auth/gmail.send',
-      ],
-      responseType: AuthSession.ResponseType.Code,
-      redirectUri: AuthSession.makeRedirectUri({
-        scheme: 'dixie-ai',
-        preferLocalhost: true,
-      }),
-    },
-    discovery
-  );
-
   useEffect(() => {
-    if (response?.type === 'success') {
-      const { code } = response.params;
-      console.log('OAuth success, code:', code);
+    // Configure Google Sign-In
+    GoogleSignin.configure({
+      webClientId: '440630945257-d3gbupl3uaafv10sib53r2q6eh4mqpku.apps.googleusercontent.com',
+      offlineAccess: true,
+      hostedDomain: '',
+      forceCodeForRefreshToken: true,
+      accountName: '',
+      iosClientId: '440630945257-d3gbupl3uaafv10sib53r2q6eh4mqpku.apps.googleusercontent.com',
+      googleServicePlistPath: '',
+    });
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      // Check if Google Play Services are available
+      await GoogleSignin.hasPlayServices();
       
-      // Here you would normally exchange the code for tokens with your backend
-      // For now, we'll do a mock login
-      login({
-        id: 'google-user',
-        name: 'Google User',
-        email: 'user@gmail.com',
-        picture: '',
-      }, {
-        accessToken: 'mock-access-token',
-        refreshToken: 'mock-refresh-token',
+      // Sign in with Google
+      const userInfo = await GoogleSignin.signIn();
+      
+      // Get the access token
+      const tokens = await GoogleSignin.getTokens();
+      
+      console.log('Google sign-in successful:', userInfo);
+      console.log('Tokens:', tokens);
+      
+      // Send the access token to backend for verification
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/auth/google/mobile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accessToken: tokens.accessToken,
+          idToken: tokens.idToken,
+        }),
       });
+      
+      if (!response.ok) {
+        throw new Error('Backend authentication failed');
+      }
+
+      const authData = await response.json();
+
+      // Login with the received data
+      await login(authData.token, authData.user);
       
       showMessage({
         message: 'Google Sign-In successful!',
         type: 'success',
       });
-    }
-  }, [response, login]);
-
-  const handleGoogleLogin = async () => {
-    try {
-      if (!request) {
-        Alert.alert('Error', 'OAuth request not ready. Please try again.');
-        return;
-      }
-
-      const result = await promptAsync();
-      if (result.type === 'cancel') {
+      
+    } catch (error: any) {
+      console.error('Google Sign-In error:', error);
+      
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
         showMessage({
           message: 'Sign-in cancelled',
           type: 'info',
         });
-      } else if (result.type === 'error') {
-        console.error('Auth error:', result.error);
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        showMessage({
+          message: 'Sign-in already in progress',
+          type: 'info',
+        });
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        showMessage({
+          message: 'Google Play Services not available',
+          type: 'danger',
+        });
+      } else {
         showMessage({
           message: 'Authentication failed. Please try again.',
           type: 'danger',
         });
       }
-    } catch (error) {
-      console.error('Auth error:', error);
-      showMessage({
-        message: 'Authentication failed. Please try again.',
-        type: 'danger',
-      });
     }
-  };
-
-  const handleDemoLogin = () => {
-    Alert.alert(
-      'Demo Mode',
-      'This will log you in with demo data so you can explore the app features.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Continue with Demo', 
-          onPress: () => {
-            login({
-              id: 'demo-user',
-              name: 'Demo User',
-              email: 'demo@example.com',
-              picture: '',
-            }, {
-              accessToken: 'demo-access-token',
-              refreshToken: 'demo-refresh-token',
-            });
-            showMessage({
-              message: 'Demo mode activated!',
-              type: 'success',
-            });
-          }
-        }
-      ]
-    );
   };
 
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
       
-      <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Ionicons name="mail" size={64} color="#4285F4" />
-        </View>
-        <Text style={styles.title}>Dixie AI</Text>
-        <Text style={styles.subtitle}>Your intelligent email assistant</Text>
+      {/* Logo Section */}
+      <View style={styles.logoContainer}>
+        <Image
+          source={require('../../assets/icon.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <Text style={styles.title}>DixieAI</Text>
+        <Text style={styles.subtitle}>Your AI Email Assistant</Text>
       </View>
 
-      <View style={styles.features}>
-        <View style={styles.feature}>
-          <Ionicons name="chatbubble-outline" size={24} color="#666" />
-          <Text style={styles.featureText}>Chat with your inbox</Text>
-        </View>
-        <View style={styles.feature}>
-          <Ionicons name="mic-outline" size={24} color="#666" />
-          <Text style={styles.featureText}>Voice commands</Text>
-        </View>
-        <View style={styles.feature}>
-          <Ionicons name="bulb-outline" size={24} color="#666" />
-          <Text style={styles.featureText}>Smart summaries</Text>
-        </View>
-      </View>
-
-      <View style={styles.bottom}>
-        <TouchableOpacity
-          style={styles.loginButton}
+      {/* Login Button */}
+      <View style={styles.loginContainer}>
+        <TouchableOpacity 
+          style={styles.googleButton}
           onPress={handleGoogleLogin}
-          disabled={!request}
         >
-          <Ionicons name="logo-google" size={20} color="#FFF" />
-          <Text style={styles.loginButtonText}>Continue with Google</Text>
+          <Ionicons name="logo-google" size={24} color="#4285F4" />
+          <Text style={styles.googleButtonText}>Sign in with Google</Text>
         </TouchableOpacity>
+      </View>
 
-        <TouchableOpacity
-          style={styles.demoButton}
-          onPress={handleDemoLogin}
-        >
-          <Ionicons name="play" size={20} color="#4285F4" />
-          <Text style={styles.demoButtonText}>Try Demo Mode</Text>
-        </TouchableOpacity>
-        
-        <Text style={styles.disclaimer}>
-          By continuing, you agree to grant Dixie access to your Gmail account
-          to provide intelligent email assistance.
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>
+          By signing in, you agree to our Terms of Service and Privacy Policy
         </Text>
       </View>
     </View>
@@ -187,90 +140,70 @@ const LoginScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 24,
-  },
-  header: {
-    flex: 1,
+    backgroundColor: '#f8f9fa',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 60,
+    paddingHorizontal: 32,
   },
   logoContainer: {
+    alignItems: 'center',
+    marginBottom: 80,
+  },
+  logo: {
     width: 120,
     height: 120,
-    borderRadius: 60,
-    backgroundColor: '#F8F9FA',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 24,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#1a1a1a',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6B7280',
+    color: '#666',
     textAlign: 'center',
   },
-  features: {
-    paddingVertical: 40,
+  loginContainer: {
+    width: '100%',
+    maxWidth: 400,
   },
-  feature: {
+  googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
-  featureText: {
+  googleButtonText: {
     fontSize: 16,
-    color: '#374151',
+    fontWeight: '600',
+    color: '#1a1a1a',
     marginLeft: 12,
   },
-  bottom: {
-    paddingBottom: 50,
-  },
-  loginButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4285F4',
-    paddingVertical: 16,
+  footer: {
+    position: 'absolute',
+    bottom: 50,
     paddingHorizontal: 32,
-    borderRadius: 12,
-    marginBottom: 16,
   },
-  loginButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  demoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#4285F4',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    marginBottom: 24,
-  },
-  demoButtonText: {
-    color: '#4285F4',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  disclaimer: {
+  footerText: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#999',
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 16,
   },
 });
 

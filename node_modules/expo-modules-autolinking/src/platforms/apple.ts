@@ -1,13 +1,20 @@
-import glob from 'fast-glob';
-import fs from 'fs-extra';
+import spawnAsync from '@expo/spawn-async';
+import fs from 'fs';
+import { glob } from 'glob';
 import path from 'path';
 
-import {
+import { fileExistsAsync } from '../fileUtils';
+import type {
+  AppleCodeSignEntitlements,
+  ExtraDependencies,
   ModuleDescriptorIos,
   ModuleIosPodspecInfo,
   PackageRevision,
   SearchOptions,
 } from '../types';
+
+const APPLE_PROPERTIES_FILE = 'Podfile.properties.json';
+const APPLE_EXTRA_BUILD_DEPS_KEY = 'apple.extraPods';
 
 const indent = '  ';
 
@@ -55,6 +62,7 @@ export async function resolveModuleAsync(
   }));
 
   const swiftModuleNames = getSwiftModuleNames(pods, revision.config?.appleSwiftModuleNames());
+  const coreFeatures = revision.config?.coreFeatures() ?? [];
 
   return {
     packageName,
@@ -65,20 +73,44 @@ export async function resolveModuleAsync(
     appDelegateSubscribers: revision.config?.appleAppDelegateSubscribers() ?? [],
     reactDelegateHandlers: revision.config?.appleReactDelegateHandlers() ?? [],
     debugOnly: revision.config?.appleDebugOnly() ?? false,
+    ...(coreFeatures.length > 0 ? { coreFeatures } : {}),
   };
+}
+
+export async function resolveExtraBuildDependenciesAsync(
+  projectNativeRoot: string
+): Promise<ExtraDependencies | null> {
+  const propsFile = path.join(projectNativeRoot, APPLE_PROPERTIES_FILE);
+  try {
+    const contents = await fs.promises.readFile(propsFile, 'utf8');
+    const podfileJson = JSON.parse(contents);
+    if (podfileJson[APPLE_EXTRA_BUILD_DEPS_KEY]) {
+      // expo-build-properties would serialize the extraPods as JSON string, we should parse it again.
+      const extraPods = JSON.parse(podfileJson[APPLE_EXTRA_BUILD_DEPS_KEY]);
+      return extraPods;
+    }
+  } catch {}
+  return null;
 }
 
 /**
  * Generates Swift file that contains all autolinked Swift packages.
  */
-export async function generatePackageListAsync(
+export async function generateModulesProviderAsync(
   modules: ModuleDescriptorIos[],
-  targetPath: string
+  targetPath: string,
+  entitlementPath: string
 ): Promise<void> {
   const className = path.basename(targetPath, path.extname(targetPath));
-  const generatedFileContent = await generatePackageListFileContentAsync(modules, className);
-
-  await fs.outputFile(targetPath, generatedFileContent);
+  const entitlements = await parseEntitlementsAsync(entitlementPath);
+  const generatedFileContent = await generatePackageListFileContentAsync(
+    modules,
+    className,
+    entitlements
+  );
+  const parentPath = path.dirname(targetPath);
+  await fs.promises.mkdir(parentPath, { recursive: true });
+  await fs.promises.writeFile(targetPath, generatedFileContent, 'utf8');
 }
 
 /**
@@ -86,7 +118,8 @@ export async function generatePackageListAsync(
  */
 async function generatePackageListFileContentAsync(
   modules: ModuleDescriptorIos[],
-  className: string
+  className: string,
+  entitlements: AppleCodeSignEntitlements
 ): Promise<string> {
   const iosModules = modules.filter(
     (module) =>
@@ -152,6 +185,10 @@ ${generateModuleClasses(appDelegateSubscribers, debugOnlyAppDelegateSubscribers)
 
   public override func getReactDelegateHandlers() -> [ExpoReactDelegateHandlerTupleType] {
 ${generateReactDelegateHandlers(reactDelegateHandlerModules, debugOnlyReactDelegateHandlerModules)}
+  }
+
+  public override func getAppCodeSignEntitlements() -> AppCodeSignEntitlements {
+    return AppCodeSignEntitlements.from(json: #"${JSON.stringify(entitlements)}"#)
   }
 }
 `;
@@ -241,4 +278,15 @@ function wrapInDebugConfigurationCheck(
   return `${indent.repeat(indentationLevel)}#if EXPO_CONFIGURATION_DEBUG\n${indent.repeat(
     indentationLevel
   )}${debugBlock}\n${indent.repeat(indentationLevel)}#endif`;
+}
+
+async function parseEntitlementsAsync(entitlementPath: string): Promise<AppleCodeSignEntitlements> {
+  if (!(await fileExistsAsync(entitlementPath))) {
+    return {};
+  }
+  const { stdout } = await spawnAsync('plutil', ['-convert', 'json', '-o', '-', entitlementPath]);
+  const entitlementsJson = JSON.parse(stdout);
+  return {
+    appGroups: entitlementsJson['com.apple.security.application-groups'] || undefined,
+  };
 }

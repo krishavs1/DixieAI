@@ -1,18 +1,21 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load environment variables FIRST, before any other imports
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth';
 import emailRoutes from './routes/email';
 import aiRoutes from './routes/ai';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;

@@ -7,25 +7,27 @@
 
 #import "RCTHermesInstance.h"
 
-namespace facebook {
-namespace react {
-RCTHermesInstance::RCTHermesInstance() : RCTHermesInstance(nullptr, nullptr) {}
+namespace facebook::react {
 
-RCTHermesInstance::RCTHermesInstance(
-    std::shared_ptr<const ReactNativeConfig> reactNativeConfig,
-    CrashManagerProvider crashManagerProvider)
-    : _reactNativeConfig(std::move(reactNativeConfig)),
-      _crashManagerProvider(std::move(crashManagerProvider)),
-      _hermesInstance(std::make_unique<HermesInstance>())
+RCTHermesInstance::RCTHermesInstance() : RCTHermesInstance(nullptr, false) {}
+
+RCTHermesInstance::RCTHermesInstance(CrashManagerProvider crashManagerProvider)
+    : RCTHermesInstance(std::move(crashManagerProvider), false)
 {
 }
 
-std::unique_ptr<jsi::Runtime> RCTHermesInstance::createJSRuntime(
+RCTHermesInstance::RCTHermesInstance(CrashManagerProvider crashManagerProvider, bool allocInOldGenBeforeTTI)
+    : _crashManagerProvider(std::move(crashManagerProvider)),
+      _hermesInstance(std::make_unique<HermesInstance>()),
+      _allocInOldGenBeforeTTI(allocInOldGenBeforeTTI)
+{
+}
+
+std::unique_ptr<JSRuntime> RCTHermesInstance::createJSRuntime(
     std::shared_ptr<MessageQueueThread> msgQueueThread) noexcept
 {
   return _hermesInstance->createJSRuntime(
-      _reactNativeConfig, _crashManagerProvider ? _crashManagerProvider() : nullptr, msgQueueThread);
+      _crashManagerProvider ? _crashManagerProvider() : nullptr, std::move(msgQueueThread), _allocInOldGenBeforeTTI);
 }
 
-} // namespace react
-} // namespace facebook
+} // namespace facebook::react

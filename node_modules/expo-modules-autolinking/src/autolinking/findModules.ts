@@ -1,10 +1,11 @@
 import chalk from 'chalk';
-import glob from 'fast-glob';
-import fs from 'fs-extra';
+import fs from 'fs';
+import { glob } from 'glob';
 import { createRequire } from 'module';
 import path from 'path';
 
 import { getProjectPackageJsonPathAsync, mergeLinkingOptionsAsync } from './mergeLinkingOptions';
+import { getIsolatedModulesPath } from './utils';
 import { requireAndResolveExpoModuleConfig } from '../ExpoModuleConfig';
 import { PackageRevision, SearchOptions, SearchResults } from '../types';
 
@@ -34,7 +35,9 @@ export async function findModulesAsync(providedOptions: SearchOptions): Promise<
     const packageConfigPaths = await findPackagesConfigPathsAsync(searchPath);
 
     for (const packageConfigPath of packageConfigPaths) {
-      const packagePath = await fs.realpath(path.join(searchPath, path.dirname(packageConfigPath)));
+      const packagePath = await fs.promises.realpath(
+        path.join(searchPath, path.dirname(packageConfigPath))
+      );
       const expoModuleConfig = requireAndResolveExpoModuleConfig(
         path.join(packagePath, path.basename(packageConfigPath))
       );
@@ -43,28 +46,12 @@ export async function findModulesAsync(providedOptions: SearchOptions): Promise<
         fallbackToDirName: isNativeModulesDir,
       });
 
-      // Check if the project is using isolated modules, by checking
-      // if the parent dir of `packagePath` is a `node_modules` folder.
-      // Isolated modules installs dependencies in small groups such as:
-      //   - /.pnpm/expo@50.x.x(...)/node_modules/@expo/cli
-      //   - /.pnpm/expo@50.x.x(...)/node_modules/expo
-      //   - /.pnpm/expo@50.x.x(...)/node_modules/expo-application
-      // When isolated modules are detected, expand the `searchPaths`
-      // to include possible nested dependencies.
-      const maybeIsolatedModulesPath = path.join(
-        packagePath,
-        name.startsWith('@') && name.includes('/') ? '../..' : '..' // scoped packages are nested deeper
-      );
-      const isIsolatedModulesPath = path.basename(maybeIsolatedModulesPath) === 'node_modules';
-      if (isIsolatedModulesPath && !searchPaths.has(maybeIsolatedModulesPath)) {
+      const maybeIsolatedModulesPath = getIsolatedModulesPath(packagePath, name);
+      if (maybeIsolatedModulesPath) {
         searchPaths.add(maybeIsolatedModulesPath);
       }
 
-      // we ignore the `exclude` option for custom native modules
-      if (
-        (!isNativeModulesDir && options.exclude?.includes(name)) ||
-        !expoModuleConfig.supportsPlatform(options.platform)
-      ) {
+      if (options.exclude?.includes(name) || !expoModuleConfig.supportsPlatform(options.platform)) {
         continue;
       }
 

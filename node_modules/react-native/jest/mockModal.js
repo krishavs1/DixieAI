@@ -13,11 +13,10 @@
 'use strict';
 
 const React = require('react');
-import typeof Modal from '../Libraries/Modal/Modal';
 
 function mockModal(BaseComponent: $FlowFixMe) {
   class ModalMock extends BaseComponent {
-    render(): React.Element<Modal> | null {
+    render(): React.MixedElement | null {
       if (this.props.visible === false) {
         return null;
       }

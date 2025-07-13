@@ -89,20 +89,24 @@ const UIAccessibilityTraits SwitchAccessibilityTrait = 0x20000000000001;
 
 static NSString *RCTRecursiveAccessibilityLabel(UIView *view)
 {
-  NSMutableString *str = [NSMutableString stringWithString:@""];
+  // Result string is initialized lazily to prevent useless but costly allocations.
+  NSMutableString *str = nil;
   for (UIView *subview in view.subviews) {
     NSString *label = subview.accessibilityLabel;
     if (!label) {
       label = RCTRecursiveAccessibilityLabel(subview);
     }
     if (label && label.length > 0) {
+      if (str == nil) {
+        str = [NSMutableString string];
+      }
       if (str.length > 0) {
         [str appendString:@" "];
       }
       [str appendString:label];
     }
   }
-  return str.length == 0 ? nil : str;
+  return str;
 }
 
 @implementation RCTView {
@@ -136,6 +140,7 @@ static NSString *RCTRecursiveAccessibilityLabel(UIView *view)
     _borderCurve = RCTBorderCurveCircular;
     _borderStyle = RCTBorderStyleSolid;
     _hitTestEdgeInsets = UIEdgeInsetsZero;
+    _cursor = RCTCursorAuto;
 
     _backgroundColor = super.backgroundColor;
   }
@@ -722,8 +727,12 @@ static CGFloat RCTDefaultIfNegativeTo(CGFloat defaultValue, CGFloat x)
   // Return scaled radii
   return (RCTCornerRadii){
       topLeftRadius * MIN(topScaleFactor, leftScaleFactor),
+      topLeftRadius * MIN(topScaleFactor, leftScaleFactor),
+      topRightRadius * MIN(topScaleFactor, rightScaleFactor),
       topRightRadius * MIN(topScaleFactor, rightScaleFactor),
       bottomLeftRadius * MIN(bottomScaleFactor, leftScaleFactor),
+      bottomLeftRadius * MIN(bottomScaleFactor, leftScaleFactor),
+      bottomRightRadius * MIN(bottomScaleFactor, rightScaleFactor),
       bottomRightRadius * MIN(bottomScaleFactor, rightScaleFactor),
   };
 }
@@ -769,10 +778,10 @@ static CGFloat RCTDefaultIfNegativeTo(CGFloat defaultValue, CGFloat x)
       [directionAwareBorderRightColor resolvedColorWithTraitCollection:self.traitCollection];
 
   return (RCTBorderColors){
-      (borderTopColor ?: borderColor).CGColor,
-      (directionAwareBorderLeftColor ?: borderColor).CGColor,
-      (borderBottomColor ?: borderColor).CGColor,
-      (directionAwareBorderRightColor ?: borderColor).CGColor,
+      (borderTopColor ?: borderColor),
+      (directionAwareBorderLeftColor ?: borderColor),
+      (borderBottomColor ?: borderColor),
+      (directionAwareBorderRightColor ?: borderColor),
   };
 }
 
@@ -796,32 +805,33 @@ static CGFloat RCTDefaultIfNegativeTo(CGFloat defaultValue, CGFloat x)
 
   RCTUpdateShadowPathForView(self);
 
+  RCTUpdateHoverStyleForView(self);
+
   const RCTCornerRadii cornerRadii = [self cornerRadii];
   const UIEdgeInsets borderInsets = [self bordersAsInsets];
   const RCTBorderColors borderColors = [self borderColorsWithTraitCollection:self.traitCollection];
 
-  BOOL useIOSBorderRendering = RCTCornerRadiiAreEqual(cornerRadii) && RCTBorderInsetsAreEqual(borderInsets) &&
-      RCTBorderColorsAreEqual(borderColors) && _borderStyle == RCTBorderStyleSolid &&
+  BOOL useIOSBorderRendering = RCTCornerRadiiAreEqualAndSymmetrical(cornerRadii) &&
+      RCTBorderInsetsAreEqual(borderInsets) && RCTBorderColorsAreEqual(borderColors) &&
 
       // iOS draws borders in front of the content whereas CSS draws them behind
       // the content. For this reason, only use iOS border drawing when clipping
       // or when the border is hidden.
 
-      (borderInsets.top == 0 || (borderColors.top && CGColorGetAlpha(borderColors.top) == 0) || self.clipsToBounds);
+      (borderInsets.top == 0 || (borderColors.top && CGColorGetAlpha(borderColors.top.CGColor) == 0) ||
+       self.clipsToBounds);
 
   // iOS clips to the outside of the border, but CSS clips to the inside. To
   // solve this, we'll need to add a container view inside the main view to
   // correctly clip the subviews.
 
-  CGColorRef backgroundColor;
-
-  backgroundColor = [_backgroundColor resolvedColorWithTraitCollection:self.traitCollection].CGColor;
+  UIColor *backgroundColor = [_backgroundColor resolvedColorWithTraitCollection:self.traitCollection];
 
   if (useIOSBorderRendering) {
-    layer.cornerRadius = cornerRadii.topLeft;
-    layer.borderColor = borderColors.left;
+    layer.cornerRadius = cornerRadii.topLeftHorizontal;
+    layer.borderColor = borderColors.left.CGColor;
     layer.borderWidth = borderInsets.left;
-    layer.backgroundColor = backgroundColor;
+    layer.backgroundColor = backgroundColor.CGColor;
     layer.contents = nil;
     layer.needsDisplayOnBoundsChange = NO;
     layer.mask = nil;
@@ -883,12 +893,39 @@ static void RCTUpdateShadowPathForView(RCTView *view)
 
       RCTLogAdvice(
           @"View #%@ of type %@ has a shadow set but cannot calculate "
-           "shadow efficiently. Consider setting a background color to "
+           "shadow efficiently. Consider setting a solid background color to "
            "fix this, or apply the shadow to a more specific component.",
           view.reactTag,
           [view class]);
     }
   }
+}
+
+static void RCTUpdateHoverStyleForView(RCTView *view)
+{
+#if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 170000 /* __IPHONE_17_0 */
+  if (@available(iOS 17.0, *)) {
+    UIHoverStyle *hoverStyle = nil;
+    if ([view cursor] == RCTCursorPointer) {
+      const RCTCornerRadii cornerRadii = [view cornerRadii];
+      const RCTCornerInsets cornerInsets = RCTGetCornerInsets(cornerRadii, UIEdgeInsetsZero);
+#if TARGET_OS_IOS
+      // Due to an Apple bug, it seems on iOS, `[UIShape shapeWithBezierPath:]` needs to
+      // be calculated in the superviews' coordinate space (view.frame). This is not true
+      // on other platforms like visionOS.
+      CGPathRef borderPath = RCTPathCreateWithRoundedRect(view.frame, cornerInsets, NULL);
+#else // TARGET_OS_VISION
+      CGPathRef borderPath = RCTPathCreateWithRoundedRect(view.bounds, cornerInsets, NULL);
+#endif
+      UIBezierPath *bezierPath = [UIBezierPath bezierPathWithCGPath:borderPath];
+      CGPathRelease(borderPath);
+      UIShape *shape = [UIShape shapeWithBezierPath:bezierPath];
+
+      hoverStyle = [UIHoverStyle styleWithEffect:[UIHoverHighlightEffect effect] shape:shape];
+    }
+    [view setHoverStyle:hoverStyle];
+  }
+#endif
 }
 
 - (void)updateClippingForLayer:(CALayer *)layer
@@ -898,8 +935,8 @@ static void RCTUpdateShadowPathForView(RCTView *view)
 
   if (self.clipsToBounds) {
     const RCTCornerRadii cornerRadii = [self cornerRadii];
-    if (RCTCornerRadiiAreEqual(cornerRadii)) {
-      cornerRadius = cornerRadii.topLeft;
+    if (RCTCornerRadiiAreEqualAndSymmetrical(cornerRadii)) {
+      cornerRadius = cornerRadii.topLeftHorizontal;
 
     } else {
       CAShapeLayer *shapeLayer = [CAShapeLayer layer];

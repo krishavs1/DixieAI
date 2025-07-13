@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#import <atomic>
 #import <mutex>
 
 #import <React/RCTLog.h>
@@ -16,9 +17,11 @@
   id<RCTURLRequestHandler> _handler;
   dispatch_queue_t _callbackQueue;
   std::mutex _mutex;
-
+  std::atomic<RCTNetworkTaskStatus> _atomicStatus;
   RCTNetworkTask *_selfReference;
 }
+
+static auto currentRequestId = std::atomic<NSUInteger>(0);
 
 - (instancetype)initWithRequest:(NSURLRequest *)request
                         handler:(id<RCTURLRequestHandler>)handler
@@ -28,14 +31,12 @@
   RCTAssertParam(handler);
   RCTAssertParam(callbackQueue);
 
-  static NSUInteger requestID = 0;
-
   if ((self = [super init])) {
-    _requestID = @(requestID++);
+    _requestID = @(currentRequestId++);
     _request = request;
     _handler = handler;
     _callbackQueue = callbackQueue;
-    _status = RCTNetworkTaskPending;
+    _atomicStatus = RCTNetworkTaskPending;
 
     dispatch_queue_set_specific(callbackQueue, (__bridge void *)self, (__bridge void *)self, NULL);
   }
@@ -43,6 +44,11 @@
 }
 
 RCT_NOT_IMPLEMENTED(-(instancetype)init)
+
+- (RCTNetworkTaskStatus)status
+{
+  return _atomicStatus;
+}
 
 - (void)invalidate
 {
@@ -66,7 +72,7 @@ RCT_NOT_IMPLEMENTED(-(instancetype)init)
 
 - (void)start
 {
-  if (_status != RCTNetworkTaskPending) {
+  if (_atomicStatus != RCTNetworkTaskPending) {
     RCTLogError(@"RCTNetworkTask was already started or completed");
     return;
   }
@@ -75,18 +81,17 @@ RCT_NOT_IMPLEMENTED(-(instancetype)init)
     id token = [_handler sendRequest:_request withDelegate:self];
     if ([self validateRequestToken:token]) {
       _selfReference = self;
-      _status = RCTNetworkTaskInProgress;
+      _atomicStatus = RCTNetworkTaskInProgress;
     }
   }
 }
 
 - (void)cancel
 {
-  if (_status == RCTNetworkTaskFinished) {
+  if (_atomicStatus.exchange(RCTNetworkTaskFinished) == RCTNetworkTaskFinished) {
     return;
   }
 
-  _status = RCTNetworkTaskFinished;
   id token = _requestToken;
   if (token && [_handler respondsToSelector:@selector(cancelRequest:)]) {
     [_handler cancelRequest:token];
@@ -107,7 +112,7 @@ RCT_NOT_IMPLEMENTED(-(instancetype)init)
   }
 
   if (!valid) {
-    _status = RCTNetworkTaskFinished;
+    _atomicStatus = RCTNetworkTaskFinished;
     if (_completionBlock) {
       RCTURLRequestCompletionBlock completionBlock = _completionBlock;
       [self dispatchCallback:^{
@@ -164,7 +169,21 @@ RCT_NOT_IMPLEMENTED(-(instancetype)init)
     if (!_data) {
       _data = [NSMutableData new];
     }
-    [_data appendData:data];
+    @try {
+      [_data appendData:data];
+    } @catch (NSException *exception) {
+      _atomicStatus = RCTNetworkTaskFinished;
+      if (_completionBlock) {
+        RCTURLRequestCompletionBlock completionBlock = _completionBlock;
+        [self dispatchCallback:^{
+          completionBlock(
+              self->_response, nil, RCTErrorWithMessage(exception.reason ?: @"Request's received data too long."));
+        }];
+      }
+      [self invalidate];
+      return;
+    }
+
     length = _data.length;
   }
 
@@ -176,7 +195,7 @@ RCT_NOT_IMPLEMENTED(-(instancetype)init)
       incrementalDataBlock(data, length, total);
     }];
   }
-  if (_downloadProgressBlock && total > 0) {
+  if (_downloadProgressBlock) {
     RCTURLRequestProgressBlock downloadProgressBlock = _downloadProgressBlock;
     [self dispatchCallback:^{
       downloadProgressBlock(length, total);
@@ -190,7 +209,7 @@ RCT_NOT_IMPLEMENTED(-(instancetype)init)
     return;
   }
 
-  _status = RCTNetworkTaskFinished;
+  _atomicStatus = RCTNetworkTaskFinished;
   if (_completionBlock) {
     RCTURLRequestCompletionBlock completionBlock = _completionBlock;
     NSData *dataCopy = nil;

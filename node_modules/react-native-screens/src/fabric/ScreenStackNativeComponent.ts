@@ -1,3 +1,5 @@
+'use client';
+
 import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
 import type { ViewProps } from 'react-native';
 import type { DirectEventHandler } from 'react-native/Libraries/Types/CodegenTypes';
@@ -5,7 +7,7 @@ import type { DirectEventHandler } from 'react-native/Libraries/Types/CodegenTyp
 // eslint-disable-next-line @typescript-eslint/ban-types
 type FinishTransitioningEvent = Readonly<{}>;
 
-interface NativeProps extends ViewProps {
+export interface NativeProps extends ViewProps {
   onFinishTransitioning?: DirectEventHandler<FinishTransitioningEvent>;
 }
 

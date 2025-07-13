@@ -2,3 +2,84 @@
 {"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T02:59:48.362Z"}
 {"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T03:00:50.445Z"}
 {"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T03:00:50.448Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T17:02:05.775Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T17:02:05.778Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T17:05:17.837Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T17:05:17.839Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:17:05:32 +0000] \"GET /health HTTP/1.1\" 200 54 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T17:05:32.597Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:17:05:39 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 421 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T17:05:39.425Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:21:33:55 +0000] \"GET /health HTTP/1.1\" 200 54 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T21:33:55.120Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:21:33:55 +0000] \"GET /favicon.ico HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T21:33:55.342Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T21:37:55.147Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T21:37:55.153Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:21:57:28 +0000] \"GET /auth/google/url HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T21:57:28.783Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:03:10 +0000] \"GET /auth/google/url HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:03:10.155Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:04:24.454Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:04:24.456Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:04:27 +0000] \"GET /auth/google/url HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:04:27.505Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:04:28 +0000] \"GET /auth/google/url HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:04:28.891Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:07:34 +0000] \"GET / HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:07:34.392Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:07:36 +0000] \"GET / HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:07:36.026Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:09:30.518Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:09:30.519Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:09:34 +0000] \"GET / HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:09:34.278Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:09:35 +0000] \"GET / HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:09:35.589Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:10:03 +0000] \"GET / HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:10:03.171Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:10:07 +0000] \"GET /api HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:10:07.306Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:10:50 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 421 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:10:50.045Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:11:12.743Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:11:12.744Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:11:16 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 421 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:11:16.967Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:11:33 +0000] \"GET /health HTTP/1.1\" 200 54 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:11:33.569Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:11:38 +0000] \"GET / HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:11:38.299Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:11:39 +0000] \"GET / HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:11:39.366Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:12:18.418Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:12:18.418Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:12:22 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 421 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:12:22.734Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:12:44 +0000] \"GET / HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:12:44.393Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:12:51 +0000] \"GET / HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:12:51.328Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:13:18 +0000] \"GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:13:18.734Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:13:50 +0000] \"GET /health HTTP/1.1\" 200 54 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:13:50.622Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:13:57 +0000] \"GET /health HTTP/1.1\" 200 54 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:13:57.534Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:13:57 +0000] \"GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1\" 404 27 \"-\" \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:13:57.556Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:14:01 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 421 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:14:01.213Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:17:42 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 421 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:17:42.619Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:18:20 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 421 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:18:20.194Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:18:33.514Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:18:33.515Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:18:41 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 421 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:18:41.710Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:18:51 +0000] \"GET /health HTTP/1.1\" 200 54 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:18:51.347Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:19:12.137Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:19:12.138Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:19:16 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 421 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:19:16.435Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:19:31.030Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:19:31.031Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:19:42 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 421 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:19:42.627Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:20:05.086Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:20:05.086Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:30:44.734Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:30:44.735Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:30:57 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 555 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:30:57.016Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:31:12.793Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:31:12.793Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:31:20.852Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:31:20.853Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:31:27 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 555 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:31:27.089Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:32:01 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 555 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:32:01.113Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:33:23.127Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:33:23.128Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:35:21 +0000] \"GET /health HTTP/1.1\" 200 54 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:35:21.544Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:35:54 +0000] \"GET /api/auth/google/url HTTP/1.1\" 200 555 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:35:54.238Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:37:46.878Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:37:46.879Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:44:25.810Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:44:25.811Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:44:47 +0000] \"GET /api/auth/google/url?mobile=true HTTP/1.1\" 200 515 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:44:47.392Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:45:46 +0000] \"GET /api/auth/google/url?mobile=true HTTP/1.1\" 200 515 \"-\" \"DixieAI/1 CFNetwork/3826.400.120 Darwin/24.2.0\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:45:46.691Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-12T22:48:52.845Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-12T22:48:52.846Z"}
+{"level":"info","message":"::1 - - [12/Jul/2025:22:51:59 +0000] \"GET /health HTTP/1.1\" 200 54 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-12T22:51:59.707Z"}
+{"level":"info","message":"🚀 Dixie AI Backend running on port 3000","service":"dixie-ai-backend","timestamp":"2025-07-13T03:38:06.556Z"}
+{"level":"info","message":"Environment: development","service":"dixie-ai-backend","timestamp":"2025-07-13T03:38:06.557Z"}
+{"level":"info","message":"::1 - - [13/Jul/2025:03:38:23 +0000] \"GET /api/auth/google/url?redirect_uri=https://auth.expo.io/@anonymous/dixie-ai-123/oauth HTTP/1.1\" 200 557 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-13T03:38:23.960Z"}
+{"level":"info","message":"::1 - - [13/Jul/2025:03:45:35 +0000] \"GET /health HTTP/1.1\" 200 54 \"-\" \"curl/8.7.1\"","service":"dixie-ai-backend","timestamp":"2025-07-13T03:45:35.628Z"}

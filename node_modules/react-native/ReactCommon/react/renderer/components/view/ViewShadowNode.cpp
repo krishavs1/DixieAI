@@ -6,10 +6,8 @@
  */
 
 #include "ViewShadowNode.h"
-#include <react/config/ReactNativeConfig.h>
 #include <react/renderer/components/view/HostPlatformViewTraitsInitializer.h>
 #include <react/renderer/components/view/primitives.h>
-#include <react/utils/CoreFeatures.h>
 
 namespace facebook::react {
 
@@ -39,6 +37,15 @@ ViewShadowNode::ViewShadowNode(
 void ViewShadowNode::initialize() noexcept {
   auto& viewProps = static_cast<const ViewProps&>(*props_);
 
+  auto hasBorder = [&]() {
+    for (auto edge : yoga::ordinals<yoga::Edge>()) {
+      if (viewProps.yogaStyle.border(edge).isDefined()) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   bool formsStackingContext = !viewProps.collapsable ||
       viewProps.pointerEvents == PointerEventsMode::None ||
       !viewProps.nativeId.empty() || viewProps.accessible ||
@@ -51,14 +58,18 @@ void ViewShadowNode::initialize() noexcept {
       viewProps.accessibilityElementsHidden ||
       viewProps.accessibilityViewIsModal ||
       viewProps.importantForAccessibility != ImportantForAccessibility::Auto ||
-      viewProps.removeClippedSubviews ||
+      viewProps.removeClippedSubviews || viewProps.cursor != Cursor::Auto ||
+      !viewProps.filter.empty() ||
+      viewProps.mixBlendMode != BlendMode::Normal ||
+      viewProps.isolation == Isolation::Isolate ||
       HostPlatformViewTraitsInitializer::formsStackingContext(viewProps);
 
   bool formsView = formsStackingContext ||
-      isColorMeaningful(viewProps.backgroundColor) ||
-      !(viewProps.yogaStyle.border() == yoga::Style::Edges{}) ||
-      !viewProps.testId.empty() ||
-      HostPlatformViewTraitsInitializer::formsView(viewProps);
+      isColorMeaningful(viewProps.backgroundColor) || hasBorder() ||
+      !viewProps.testId.empty() || !viewProps.boxShadow.empty() ||
+      !viewProps.backgroundImage.empty() ||
+      HostPlatformViewTraitsInitializer::formsView(viewProps) ||
+      viewProps.outlineWidth > 0;
 
   if (formsView) {
     traits_.set(ShadowNodeTraits::Trait::FormsView);
@@ -72,7 +83,11 @@ void ViewShadowNode::initialize() noexcept {
     traits_.unset(ShadowNodeTraits::Trait::FormsStackingContext);
   }
 
-  traits_.set(HostPlatformViewTraitsInitializer::extraTraits());
+  if (!viewProps.collapsableChildren) {
+    traits_.set(ShadowNodeTraits::Trait::ChildrenFormStackingContext);
+  } else {
+    traits_.unset(ShadowNodeTraits::Trait::ChildrenFormStackingContext);
+  }
 }
 
 } // namespace facebook::react

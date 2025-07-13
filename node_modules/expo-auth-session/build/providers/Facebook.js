@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { Platform } from 'react-native';
-import { applyRequiredScopes } from './ProviderUtils';
+import { applyRequiredScopes, invariantClientId } from './ProviderUtils';
+import { AuthRequest } from '../AuthRequest';
+import { ResponseType } from '../AuthRequest.types';
 import { useAuthRequestResult, useLoadedAuthRequest } from '../AuthRequestHooks';
-import { AuthRequest, makeRedirectUri, ResponseType, } from '../AuthSession';
+import { makeRedirectUri } from '../AuthSession';
 import { generateHexStringAsync } from '../PKCE';
 const settings = {
     windowFeatures: { width: 700, height: 600 },
@@ -82,14 +84,10 @@ export function useAuthRequest(config = {}, redirectUriOptions = {}) {
             android: 'androidClientId',
             default: 'webClientId',
         });
-        return config[propertyName] ?? config.clientId;
-    }, [
-        config.expoClientId,
-        config.iosClientId,
-        config.androidClientId,
-        config.webClientId,
-        config.clientId,
-    ]);
+        const clientId = config[propertyName] ?? config.clientId;
+        invariantClientId(propertyName, clientId, 'Facebook');
+        return clientId;
+    }, [config.iosClientId, config.androidClientId, config.webClientId, config.clientId]);
     const redirectUri = useMemo(() => {
         if (typeof config.redirectUri !== 'undefined') {
             return config.redirectUri;

@@ -3,7 +3,7 @@ import { NativeMethods } from 'react-native';
 import { Playback, AVPlaybackSource, AVPlaybackStatus, AVPlaybackStatusToSet, AVPlaybackTolerance, PitchCorrectionQuality } from './AV';
 import { VideoFullscreenUpdateEvent, VideoNativeProps, VideoProps, VideoReadyForDisplayEvent, VideoState } from './Video.types';
 declare class Video extends React.Component<VideoProps, VideoState> implements Playback {
-    _nativeRef: React.RefObject<React.Component<VideoNativeProps, any, any> & NativeMethods>;
+    _nativeRef: React.RefObject<(React.Component<VideoNativeProps, any, any> & NativeMethods) | null>;
     _onPlaybackStatusUpdate: ((status: AVPlaybackStatus) => void) | null;
     constructor(props: VideoProps);
     /**
@@ -90,8 +90,8 @@ declare class Video extends React.Component<VideoProps, VideoState> implements P
     _nativeOnFullscreenUpdate: (event: {
         nativeEvent: VideoFullscreenUpdateEvent;
     }) => void;
-    _renderPoster: () => JSX.Element | null;
-    render(): JSX.Element;
+    _renderPoster: () => React.JSX.Element | null;
+    render(): React.JSX.Element;
 }
 export default Video;
 //# sourceMappingURL=Video.d.ts.map

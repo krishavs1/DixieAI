@@ -8,17 +8,15 @@ import {
   CodeChallengeMethod,
   ResponseType,
   Prompt,
+  AuthDiscoveryDocument,
 } from './AuthRequest.types';
 import { AuthSessionResult } from './AuthSession.types';
-import { DiscoveryDocument } from './Discovery';
 import { AuthError } from './Errors';
 import * as PKCE from './PKCE';
 import * as QueryParams from './QueryParams';
 import { TokenResponse } from './TokenRequest';
 
 let _authLock: boolean = false;
-
-type AuthDiscoveryDocument = Pick<DiscoveryDocument, 'authorizationEndpoint'>;
 
 // @needsAudit @docsMissing
 /**
@@ -63,7 +61,7 @@ export class AuthRequest implements Omit<AuthRequestConfig, 'state'> {
   readonly redirectUri: string;
   readonly scopes?: string[];
   readonly clientSecret?: string;
-  readonly prompt?: Prompt;
+  readonly prompt?: Prompt | Prompt[];
 
   constructor(request: AuthRequestConfig) {
     this.responseType = request.responseType ?? ResponseType.Code;
@@ -259,7 +257,8 @@ export class AuthRequest implements Omit<AuthRequestConfig, 'state'> {
     }
 
     if (request.prompt) {
-      params.prompt = request.prompt;
+      params.prompt =
+        typeof request.prompt === 'string' ? request.prompt : request.prompt.join(' ');
     }
 
     // These overwrite any extra params

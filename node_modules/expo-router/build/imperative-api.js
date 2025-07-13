@@ -1,16 +1,31 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.router = void 0;
-const router_store_1 = require("./global-state/router-store");
+exports.ImperativeApiEmitter = ImperativeApiEmitter;
+const react_1 = require("react");
+const routing_1 = require("./global-state/routing");
+/**
+ * @hidden
+ */
 exports.router = {
-    navigate: (href) => router_store_1.store.navigate(href),
-    push: (href) => router_store_1.store.push(href),
-    dismiss: (count) => router_store_1.store.dismiss(count),
-    dismissAll: () => router_store_1.store.dismissAll(),
-    canDismiss: () => router_store_1.store.canDismiss(),
-    replace: (href) => router_store_1.store.replace(href),
-    back: () => router_store_1.store.goBack(),
-    canGoBack: () => router_store_1.store.canGoBack(),
-    setParams: (params) => router_store_1.store.setParams(params),
+    navigate: routing_1.navigate,
+    push: routing_1.push,
+    dismiss: routing_1.dismiss,
+    dismissAll: routing_1.dismissAll,
+    dismissTo: routing_1.dismissTo,
+    canDismiss: routing_1.canDismiss,
+    replace: routing_1.replace,
+    back: () => (0, routing_1.goBack)(),
+    canGoBack: routing_1.canGoBack,
+    reload: routing_1.reload,
+    prefetch: routing_1.prefetch,
+    setParams: routing_1.setParams,
 };
+function ImperativeApiEmitter() {
+    const events = (0, react_1.useSyncExternalStore)(routing_1.routingQueue.subscribe, routing_1.routingQueue.snapshot, routing_1.routingQueue.snapshot);
+    (0, react_1.useEffect)(() => {
+        routing_1.routingQueue.run();
+    }, [events]);
+    return null;
+}
 //# sourceMappingURL=imperative-api.js.map

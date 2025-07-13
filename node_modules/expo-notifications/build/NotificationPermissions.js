@@ -1,4 +1,4 @@
-import { createPermissionHook, Platform, UnavailabilityError } from 'expo-modules-core';
+import { Platform, UnavailabilityError } from 'expo-modules-core';
 import NotificationPermissionsModule from './NotificationPermissionsModule';
 /**
  * Calling this function checks current permissions settings related to notifications.
@@ -36,12 +36,11 @@ export async function getPermissionsAsync() {
  * import * as Notifications from 'expo-notifications';
  *
  * export function requestPermissionsAsync() {
- *   return await Notifications.requestPermissionsAsync({
+ *   return Notifications.requestPermissionsAsync({
  *     ios: {
  *       allowAlert: true,
  *       allowBadge: true,
  *       allowSound: true,
- *       allowAnnouncements: true,
  *     },
  *   });
  * }
@@ -60,20 +59,7 @@ export async function requestPermissionsAsync(permissions) {
         },
     };
     const requestedPlatformPermissions = requestedPermissions[Platform.OS];
+    // TODO(@kitten): This never checks whether the configuration object is undefined
     return await NotificationPermissionsModule.requestPermissionsAsync(requestedPlatformPermissions);
 }
-// @needsAudit
-/**
- * Check or request permissions to send and receive push notifications.
- * This uses both `requestPermissionsAsync` and `getPermissionsAsync` to interact with the permissions.
- * @example
- * ```ts
- * const [permissionResponse, requestPermission] = Notifications.usePermissions();
- * ```
- * @header permission
- */
-export const usePermissions = createPermissionHook({
-    requestMethod: requestPermissionsAsync,
-    getMethod: getPermissionsAsync,
-});
 //# sourceMappingURL=NotificationPermissions.js.map

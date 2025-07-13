@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getReactNavigationConfig = exports.getReactNavigationScreensConfig = void 0;
+exports.parseRouteSegments = parseRouteSegments;
+exports.getReactNavigationScreensConfig = getReactNavigationScreensConfig;
+exports.getReactNavigationConfig = getReactNavigationConfig;
 const matchers_1 = require("./matchers");
 // `[page]` -> `:page`
 // `page` -> `page`
@@ -12,15 +14,16 @@ function convertDynamicRouteToReactNavigation(segment) {
     if (segment === '+not-found') {
         return '*not-found';
     }
-    const rest = (0, matchers_1.matchDeepDynamicRouteName)(segment);
-    if (rest != null) {
-        return '*' + rest;
-    }
     const dynamicName = (0, matchers_1.matchDynamicName)(segment);
-    if (dynamicName != null) {
-        return `:${dynamicName}`;
+    if (dynamicName && !dynamicName.deep) {
+        return `:${dynamicName.name}`;
     }
-    return segment;
+    else if (dynamicName?.deep) {
+        return '*' + dynamicName.name;
+    }
+    else {
+        return segment;
+    }
 }
 function parseRouteSegments(segments) {
     return (
@@ -52,12 +55,14 @@ function convertRouteNodeToScreen(node, metaOnly) {
     const screen = {
         path,
         screens,
+    };
+    if (node.initialRouteName) {
         // NOTE(EvanBacon): This is bad because it forces all Layout Routes
         // to be loaded into memory. We should move towards a system where
         // the initial route name is either loaded asynchronously in the Layout Route
         // or defined via a file system convention.
-        initialRouteName: node.initialRouteName,
-    };
+        screen.initialRouteName = node.initialRouteName;
+    }
     if (!metaOnly) {
         screen._route = node;
     }
@@ -66,12 +71,16 @@ function convertRouteNodeToScreen(node, metaOnly) {
 function getReactNavigationScreensConfig(nodes, metaOnly) {
     return Object.fromEntries(nodes.map((node) => [node.route, convertRouteNodeToScreen(node, metaOnly)]));
 }
-exports.getReactNavigationScreensConfig = getReactNavigationScreensConfig;
 function getReactNavigationConfig(routes, metaOnly) {
-    return {
-        initialRouteName: routes.initialRouteName,
+    const config = {
+        initialRouteName: undefined,
         screens: getReactNavigationScreensConfig(routes.children, metaOnly),
     };
+    if (routes.initialRouteName) {
+        // We're using LinkingOptions the generic type is `object` instead of a proper ParamList.
+        // So we need to cast the initialRouteName to `any` to avoid type errors.
+        config.initialRouteName = routes.initialRouteName;
+    }
+    return config;
 }
-exports.getReactNavigationConfig = getReactNavigationConfig;
 //# sourceMappingURL=getReactNavigationConfig.js.map

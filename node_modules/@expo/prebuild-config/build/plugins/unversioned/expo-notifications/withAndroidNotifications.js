@@ -24,9 +24,9 @@ function _imageUtils() {
   };
   return data;
 }
-function _fsExtra() {
-  const data = _interopRequireDefault(require("fs-extra"));
-  _fsExtra = function () {
+function _fs() {
+  const data = _interopRequireDefault(require("fs"));
+  _fs = function () {
     return data;
   };
   return data;
@@ -45,7 +45,7 @@ function _withAndroidIcons() {
   };
   return data;
 }
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 const {
   Colors
 } = _configPlugins().AndroidConfig;
@@ -55,18 +55,12 @@ const {
   removeMetaDataItemFromMainApplication
 } = _configPlugins().AndroidConfig.Manifest;
 const BASELINE_PIXEL_SIZE = 24;
-const META_DATA_NOTIFICATION_ICON = 'expo.modules.notifications.default_notification_icon';
-exports.META_DATA_NOTIFICATION_ICON = META_DATA_NOTIFICATION_ICON;
-const META_DATA_NOTIFICATION_ICON_COLOR = 'expo.modules.notifications.default_notification_color';
-exports.META_DATA_NOTIFICATION_ICON_COLOR = META_DATA_NOTIFICATION_ICON_COLOR;
-const NOTIFICATION_ICON = 'notification_icon';
-exports.NOTIFICATION_ICON = NOTIFICATION_ICON;
-const NOTIFICATION_ICON_RESOURCE = `@drawable/${NOTIFICATION_ICON}`;
-exports.NOTIFICATION_ICON_RESOURCE = NOTIFICATION_ICON_RESOURCE;
-const NOTIFICATION_ICON_COLOR = 'notification_icon_color';
-exports.NOTIFICATION_ICON_COLOR = NOTIFICATION_ICON_COLOR;
-const NOTIFICATION_ICON_COLOR_RESOURCE = `@color/${NOTIFICATION_ICON_COLOR}`;
-exports.NOTIFICATION_ICON_COLOR_RESOURCE = NOTIFICATION_ICON_COLOR_RESOURCE;
+const META_DATA_NOTIFICATION_ICON = exports.META_DATA_NOTIFICATION_ICON = 'expo.modules.notifications.default_notification_icon';
+const META_DATA_NOTIFICATION_ICON_COLOR = exports.META_DATA_NOTIFICATION_ICON_COLOR = 'expo.modules.notifications.default_notification_color';
+const NOTIFICATION_ICON = exports.NOTIFICATION_ICON = 'notification_icon';
+const NOTIFICATION_ICON_RESOURCE = exports.NOTIFICATION_ICON_RESOURCE = `@drawable/${NOTIFICATION_ICON}`;
+const NOTIFICATION_ICON_COLOR = exports.NOTIFICATION_ICON_COLOR = 'notification_icon_color';
+const NOTIFICATION_ICON_COLOR_RESOURCE = exports.NOTIFICATION_ICON_COLOR_RESOURCE = `@color/${NOTIFICATION_ICON_COLOR}`;
 const withNotificationIcons = config => {
   return (0, _configPlugins().withDangerousMod)(config, ['android', async config => {
     await setNotificationIconAsync(config, config.modRequest.projectRoot);
@@ -89,12 +83,10 @@ const withNotificationManifest = config => {
 };
 exports.withNotificationManifest = withNotificationManifest;
 function getNotificationIcon(config) {
-  var _config$notification;
-  return ((_config$notification = config.notification) === null || _config$notification === void 0 ? void 0 : _config$notification.icon) || null;
+  return config.notification?.icon || null;
 }
 function getNotificationColor(config) {
-  var _config$notification2;
-  return ((_config$notification2 = config.notification) === null || _config$notification2 === void 0 ? void 0 : _config$notification2.color) || null;
+  return config.notification?.color || null;
 }
 
 /**
@@ -138,7 +130,9 @@ async function writeNotificationIconImageFilesAsync(icon, projectRoot) {
   }) => {
     const drawableFolderName = folderName.replace('mipmap', 'drawable');
     const dpiFolderPath = _path().default.resolve(projectRoot, _withAndroidIcons().ANDROID_RES_PATH, drawableFolderName);
-    await _fsExtra().default.ensureDir(dpiFolderPath);
+    await _fs().default.promises.mkdir(dpiFolderPath, {
+      recursive: true
+    });
     const iconSizePx = BASELINE_PIXEL_SIZE * scale;
     try {
       const resizedIcon = (await (0, _imageUtils().generateImageAsync)({
@@ -151,7 +145,7 @@ async function writeNotificationIconImageFilesAsync(icon, projectRoot) {
         resizeMode: 'cover',
         backgroundColor: 'transparent'
       })).source;
-      await _fsExtra().default.writeFile(_path().default.resolve(dpiFolderPath, NOTIFICATION_ICON + '.png'), resizedIcon);
+      await _fs().default.promises.writeFile(_path().default.resolve(dpiFolderPath, NOTIFICATION_ICON + '.png'), resizedIcon);
     } catch (e) {
       throw new Error('Encountered an issue resizing Android notification icon: ' + e);
     }
@@ -163,7 +157,9 @@ async function removeNotificationIconImageFilesAsync(projectRoot) {
   }) => {
     const drawableFolderName = folderName.replace('mipmap', 'drawable');
     const dpiFolderPath = _path().default.resolve(projectRoot, _withAndroidIcons().ANDROID_RES_PATH, drawableFolderName);
-    await _fsExtra().default.remove(_path().default.resolve(dpiFolderPath, NOTIFICATION_ICON + '.png'));
+    await _fs().default.promises.rm(_path().default.resolve(dpiFolderPath, NOTIFICATION_ICON + '.png'), {
+      force: true
+    });
   }));
 }
 //# sourceMappingURL=withAndroidNotifications.js.map
