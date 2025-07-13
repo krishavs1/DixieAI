@@ -34,13 +34,13 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>exp+dixie-ai</string>
+          <string>com.googleusercontent.apps.440630945257-da4rqdkj9u79e7ufb8e3063bs35ilbcc</string>
         </array>
       </dict>
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>com.googleusercontent.apps.440630945257-d3gbupl3uaafv10sib53r2q6eh4mqpku</string>
+          <string>exp+dixie-ai</string>
         </array>
       </dict>
     </array>
@@ -57,6 +57,8 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your microphone</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
 import { z } from 'zod';
+import axios from 'axios';
 
 const router = express.Router();
 
@@ -16,6 +17,11 @@ const oauth2Client = new google.auth.OAuth2(
 const tokenExchangeSchema = z.object({
   code: z.string(),
   state: z.string().optional(),
+});
+
+// Schema for mobile authentication
+const mobileAuthSchema = z.object({
+  idToken: z.string(),
 });
 
 // Get OAuth URL
@@ -124,70 +130,52 @@ router.post('/refresh', async (req: express.Request, res: express.Response) => {
   }
 });
 
-// Mobile Google authentication endpoint
-router.post('/google/mobile', async (req: express.Request, res: express.Response) => {
+// Mobile Google authentication endpoint (like YouTube tutorial)
+router.post('/google/mobile', async (req: express.Request, res: express.Response): Promise<void> => {
   try {
-    const { accessToken, idToken } = req.body;
+    const { idToken } = mobileAuthSchema.parse(req.body);
 
-    if (!accessToken || !idToken) {
-      return res.status(400).json({ error: 'Access token and ID token are required' });
-    }
+    // Verify the ID token with Google API (like in YouTube tutorial)
+    const response = await axios.get(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
+    );
 
-    // Verify the ID token with Google
-    const OAuth2 = google.auth.OAuth2;
-    const client = new OAuth2();
-    
-    const ticket = await client.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
+    const { sub, email, name, given_name, family_name, picture } = response.data;
 
-    const payload = ticket.getPayload();
-    if (!payload) {
-      return res.status(401).json({ error: 'Invalid ID token' });
-    }
-
-    const { sub: googleId, email, name, picture } = payload;
-
-    if (!email || !name) {
-      return res.status(400).json({ error: 'Email and name are required' });
+    // Verify the client ID matches
+    if (response.data.aud !== process.env.GOOGLE_CLIENT_ID) {
+      res.status(400).json({ message: 'Invalid client ID' });
+      return;
     }
 
     // Create user object
     const user = {
-      id: googleId,
+      googleId: sub,
       email,
       name,
-      picture: picture || '',
+      givenName: given_name,
+      familyName: family_name,
+      picture,
     };
 
-    // Create JWT token
-    const jwtPayload = {
-      userId: googleId,
-      email,
-      name,
-      googleAccessToken: accessToken, // Include Google access token for Gmail API
-    };
+    // Create JWT token for authentication
+    const token = jwt.sign(
+      { userId: sub, email: email },
+      process.env.JWT_SECRET || 'fallback-secret',
+      { expiresIn: '7d' }
+    );
 
-    const token = jwt.sign(jwtPayload, process.env.JWT_SECRET!, {
-      expiresIn: '7d',
-    });
+    logger.info(`Mobile Google authentication successful for user: ${email}`);
 
-    logger.info('Mobile Google authentication successful', {
-      userId: googleId,
-      email,
-      name,
-    });
-
-    return res.json({
+    // Send response with the user and token (like YouTube tutorial)
+    res.status(200).json({
+      message: 'Google login successful',
       user,
       token,
-      refreshToken: null, // Mobile flow doesn't need refresh tokens
     });
-
-  } catch (error) {
-    logger.error('Mobile Google authentication error:', error);
-    return res.status(500).json({ error: 'Authentication failed' });
+  } catch (error: any) {
+    logger.error('Mobile Google authentication failed:', error);
+    res.status(400).json({ message: 'Google authentication failed', error: error.message });
   }
 });
 

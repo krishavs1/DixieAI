@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useContext, useState } from 'react';
 import {
   View,
   Text,
@@ -10,94 +10,80 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { useAuthStore } from '../store/authStore';
-import { apiService } from '../services/api';
+import { GoogleSignin } from '../config/googleSignIn';
+import { AuthContext } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showMessage } from 'react-native-flash-message';
 import { API_CONFIG } from '../config/api';
 
 const { width } = Dimensions.get('window');
 
 const LoginScreen = () => {
-  const { login } = useAuthStore();
+  const authContext = useContext(AuthContext);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // Configure Google Sign-In
-    GoogleSignin.configure({
-      webClientId: '440630945257-d3gbupl3uaafv10sib53r2q6eh4mqpku.apps.googleusercontent.com',
-      offlineAccess: true,
-      hostedDomain: '',
-      forceCodeForRefreshToken: true,
-      accountName: '',
-      iosClientId: '440630945257-d3gbupl3uaafv10sib53r2q6eh4mqpku.apps.googleusercontent.com',
-      googleServicePlistPath: '',
-    });
-  }, []);
+  if (!authContext) {
+    throw new Error('LoginScreen must be used within an AuthProvider');
+  }
+
+  const { setToken, setUser } = authContext;
+
+  const GoogleLogin = async () => {
+    await GoogleSignin.hasPlayServices();
+    const userInfo = await GoogleSignin.signIn();
+    console.log('Google user info:', userInfo);
+    return userInfo;
+  };
 
   const handleGoogleLogin = async () => {
+    setLoading(true);
     try {
-      // Check if Google Play Services are available
-      await GoogleSignin.hasPlayServices();
-      
-      // Sign in with Google
-      const userInfo = await GoogleSignin.signIn();
-      
-      // Get the access token
-      const tokens = await GoogleSignin.getTokens();
-      
-      console.log('Google sign-in successful:', userInfo);
-      console.log('Tokens:', tokens);
-      
-      // Send the access token to backend for verification
-      const response = await fetch(`${API_CONFIG.BASE_URL}/api/auth/google/mobile`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          accessToken: tokens.accessToken,
-          idToken: tokens.idToken,
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Backend authentication failed');
-      }
+      const response = await GoogleLogin(); // Google sign-in
+      const idToken = response.data?.idToken; // Get idToken from response.data
 
-      const authData = await response.json();
+      console.log('idToken:', idToken); // Log idToken to check if it's retrieved
 
-      // Login with the received data
-      await login(authData.token, authData.user);
-      
-      showMessage({
-        message: 'Google Sign-In successful!',
-        type: 'success',
-      });
-      
-    } catch (error: any) {
-      console.error('Google Sign-In error:', error);
-      
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        showMessage({
-          message: 'Sign-in cancelled',
-          type: 'info',
+      if (idToken) {
+        // Send idToken to the backend (following YouTube tutorial approach)
+        const backendResponse = await fetch(`${API_CONFIG.BASE_URL}/api/auth/google/mobile`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            idToken: idToken, // Sending the idToken like in the tutorial
+          }),
         });
-      } else if (error.code === statusCodes.IN_PROGRESS) {
+
+        if (!backendResponse.ok) {
+          throw new Error('Backend authentication failed');
+        }
+
+        const data = await backendResponse.json();
+        console.log('Backend Response:', data);
+
+        // Store token in AsyncStorage
+        await AsyncStorage.setItem('authToken', data.token);
+
+        // Update auth state
+        setToken(data.token);
+        setUser(data.user);
+
         showMessage({
-          message: 'Sign-in already in progress',
-          type: 'info',
-        });
-      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        showMessage({
-          message: 'Google Play Services not available',
-          type: 'danger',
+          message: 'Google Sign-In successful!',
+          type: 'success',
         });
       } else {
-        showMessage({
-          message: 'Authentication failed. Please try again.',
-          type: 'danger',
-        });
+        throw new Error('No idToken received from Google');
       }
+    } catch (error: any) {
+      console.log('Login Error:', error);
+      showMessage({
+        message: 'Authentication failed. Please try again.',
+        type: 'danger',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -121,9 +107,12 @@ const LoginScreen = () => {
         <TouchableOpacity 
           style={styles.googleButton}
           onPress={handleGoogleLogin}
+          disabled={loading}
         >
           <Ionicons name="logo-google" size={24} color="#4285F4" />
-          <Text style={styles.googleButtonText}>Sign in with Google</Text>
+          <Text style={styles.googleButtonText}>
+            {loading ? 'Signing in...' : 'Sign in with Google'}
+          </Text>
         </TouchableOpacity>
       </View>
 
