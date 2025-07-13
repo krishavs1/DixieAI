@@ -22,6 +22,7 @@ const tokenExchangeSchema = z.object({
 // Schema for mobile authentication
 const mobileAuthSchema = z.object({
   idToken: z.string(),
+  accessToken: z.string(),
 });
 
 // Get OAuth URL
@@ -133,7 +134,7 @@ router.post('/refresh', async (req: express.Request, res: express.Response) => {
 // Mobile Google authentication endpoint (like YouTube tutorial)
 router.post('/google/mobile', async (req: express.Request, res: express.Response): Promise<void> => {
   try {
-    const { idToken } = mobileAuthSchema.parse(req.body);
+    const { idToken, accessToken } = mobileAuthSchema.parse(req.body);
 
     // Verify the ID token with Google API (like in YouTube tutorial)
     const response = await axios.get(
@@ -160,7 +161,7 @@ router.post('/google/mobile', async (req: express.Request, res: express.Response
 
     // Create JWT token for authentication
     const token = jwt.sign(
-      { userId: sub, email: email },
+      { userId: sub, email: email, accessToken: accessToken },
       process.env.JWT_SECRET || 'fallback-secret',
       { expiresIn: '7d' }
     );

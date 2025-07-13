@@ -40,11 +40,16 @@ const LoginScreen = () => {
     try {
       const response = await GoogleLogin(); // Google sign-in
       const idToken = response.data?.idToken; // Get idToken from response.data
+      
+      // Also get access token for Gmail API
+      const tokens = await GoogleSignin.getTokens();
+      const accessToken = tokens.accessToken;
 
       console.log('idToken:', idToken); // Log idToken to check if it's retrieved
+      console.log('accessToken:', accessToken); // Log accessToken
 
       if (idToken) {
-        // Send idToken to the backend (following YouTube tutorial approach)
+        // Send idToken and accessToken to the backend (following YouTube tutorial approach)
         const backendResponse = await fetch(`${API_CONFIG.BASE_URL}/api/auth/google/mobile`, {
           method: 'POST',
           headers: {
@@ -52,6 +57,7 @@ const LoginScreen = () => {
           },
           body: JSON.stringify({
             idToken: idToken, // Sending the idToken like in the tutorial
+            accessToken: accessToken, // Also send access token for Gmail API
           }),
         });
 

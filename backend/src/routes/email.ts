@@ -23,6 +23,15 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
   try {
     const { accessToken } = req.user;
     
+    // Debug: Log what we have in req.user
+    logger.info('User data from JWT:', req.user);
+    logger.info('Access token:', accessToken);
+    
+    if (!accessToken) {
+      logger.error('No access token found in JWT payload');
+      return res.status(401).json({ error: 'No access token available. Please log in again.' });
+    }
+    
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
     

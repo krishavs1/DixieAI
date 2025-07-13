@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useAuthStore } from '../store/authStore';
+import { AuthContext } from '../context/AuthContext';
 
 interface Message {
   id: string;
@@ -30,7 +30,13 @@ interface Message {
 const ChatScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { user } = useAuthStore();
+  const authContext = useContext(AuthContext);
+  
+  if (!authContext) {
+    throw new Error('ChatScreen must be used within AuthProvider');
+  }
+  
+  const { user } = authContext;
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
