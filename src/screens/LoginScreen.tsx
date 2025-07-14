@@ -90,7 +90,7 @@ const LoginScreen = () => {
       });
     } finally {
       setLoading(false);
-    }
+          }
   };
 
   return (
@@ -98,7 +98,7 @@ const LoginScreen = () => {
       <StatusBar style="dark" />
       
       {/* Logo Section */}
-      <View style={styles.logoContainer}>
+        <View style={styles.logoContainer}>
         <Image
           source={require('../../assets/icon.png')}
           style={styles.logo}
@@ -110,7 +110,7 @@ const LoginScreen = () => {
 
       {/* Login Button */}
       <View style={styles.loginContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.googleButton}
           onPress={handleGoogleLogin}
           disabled={loading}

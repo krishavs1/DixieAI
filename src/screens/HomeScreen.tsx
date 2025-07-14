@@ -160,26 +160,26 @@ const HomeScreen = () => {
           <TouchableOpacity onPress={handleVoiceCommand} style={styles.voiceButton}>
             <Ionicons name="mic" size={20} color="#4285F4" />
           </TouchableOpacity>
-        </View>
+      </View>
 
         {/* Quick Actions */}
-        <View style={styles.quickActions}>
+      <View style={styles.quickActions}>
           <TouchableOpacity style={styles.actionButton} onPress={handleRefresh}>
             <Ionicons name="refresh" size={16} color="#4285F4" />
             <Text style={styles.actionText}>Refresh</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="mail-unread" size={16} color="#4285F4" />
+        <TouchableOpacity style={styles.actionButton}>
+          <Ionicons name="mail-unread" size={16} color="#4285F4" />
             <Text style={styles.actionText}>
               Threads ({threads.length})
             </Text>
-          </TouchableOpacity>
+        </TouchableOpacity>
           
-          <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity style={styles.actionButton}>
             <Ionicons name="create" size={16} color="#4285F4" />
             <Text style={styles.actionText}>Compose</Text>
-          </TouchableOpacity>
+        </TouchableOpacity>
         </View>
       </View>
 
@@ -188,17 +188,17 @@ const HomeScreen = () => {
         {error ? (
           renderError()
         ) : (
-          <FlatList
-            data={threads}
-            renderItem={renderThread}
-            keyExtractor={(item) => item.id}
+      <FlatList
+        data={threads}
+        renderItem={renderThread}
+        keyExtractor={(item) => item.id}
             ListEmptyComponent={!isLoading ? renderEmpty : null}
             refreshControl={
               <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} />
             }
             contentContainerStyle={threads.length === 0 ? styles.emptyListContainer : undefined}
-            showsVerticalScrollIndicator={false}
-          />
+        showsVerticalScrollIndicator={false}
+      />
         )}
       </View>
 

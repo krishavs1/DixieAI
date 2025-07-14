@@ -58,7 +58,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppNavigator />
-      <FlashMessage position="top" />
+          <FlashMessage position="top" />
     </AuthProvider>
   );
 } 
