@@ -1,5 +1,5 @@
 export const API_CONFIG = {
-  BASE_URL: __DEV__ ? 'http://localhost:3000' : 'https://your-backend-url.com',
+  BASE_URL: __DEV__ ? 'http://172.20.214.39:3000' : 'https://your-backend-url.com',
   ENDPOINTS: {
     AUTH: {
       GOOGLE_URL: '/api/auth/google/url',

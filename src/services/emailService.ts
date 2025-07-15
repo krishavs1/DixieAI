@@ -25,6 +25,9 @@ export interface EmailMessage {
   subject: string;
   date: string;
   body: string;
+  rawBody?: string;
+  plainTextContent?: string;
+  hasBlockedImages?: boolean;
   snippet: string;
 }
 
