@@ -119,14 +119,21 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
       const subject = headers.find(h => h.name === 'Subject')?.value || '';
       const date = headers.find(h => h.name === 'Date')?.value || '';
       
-      // Extract body content
+      // Extract body content - prioritize HTML, fall back to plain text
       let body = '';
       if (message.payload?.body?.data) {
         body = Buffer.from(message.payload.body.data, 'base64').toString();
       } else if (message.payload?.parts) {
-        const textPart = message.payload.parts.find(part => part.mimeType === 'text/plain');
-        if (textPart?.body?.data) {
-          body = Buffer.from(textPart.body.data, 'base64').toString();
+        // First try to find HTML content
+        const htmlPart = message.payload.parts.find(part => part.mimeType === 'text/html');
+        if (htmlPart?.body?.data) {
+          body = Buffer.from(htmlPart.body.data, 'base64').toString();
+        } else {
+          // Fall back to plain text
+          const textPart = message.payload.parts.find(part => part.mimeType === 'text/plain');
+          if (textPart?.body?.data) {
+            body = Buffer.from(textPart.body.data, 'base64').toString();
+          }
         }
       }
 

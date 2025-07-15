@@ -68,7 +68,7 @@ const HomeScreen = () => {
   };
 
   const handleThreadPress = (thread: EmailThread) => {
-    (navigation as any).navigate('Chat', { threadId: thread.id, thread });
+    (navigation as any).navigate('EmailDetail', { threadId: thread.id, thread });
   };
 
   const handleRefresh = () => {

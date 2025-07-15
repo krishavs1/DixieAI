@@ -6,6 +6,7 @@ import { AuthProvider, AuthContext } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ChatScreen from './src/screens/ChatScreen';
+import EmailDetailScreen from './src/screens/EmailDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -27,6 +28,11 @@ const MainStack = () => {
       <Stack.Screen
         name="Home"
         component={HomeScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="EmailDetail"
+        component={EmailDetailScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
