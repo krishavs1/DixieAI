@@ -16,10 +16,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import RenderHtml from 'react-native-render-html';
 import { AuthContext } from '../context/AuthContext';
 import { emailService, DetailedEmailThread, EmailMessage } from '../services/emailService';
 import { API_CONFIG } from '../config/api';
+import EmailRenderer from '../components/EmailRenderer';
 
 const EmailDetailScreen = () => {
   const navigation = useNavigation();
@@ -231,56 +231,6 @@ const EmailDetailScreen = () => {
     );
   };
 
-  const renderMessageControls = (message: EmailMessage) => {
-    const showPlainText = showPlainTextMap[message.id] || false;
-    const showImages = showImagesMap[message.id] || false;
-    const content = processedContentMap[message.id] || message.body || message.snippet;
-    const rawBody = message.rawBody || message.body;
-    
-    const togglePlainText = () => {
-      setShowPlainTextMap(prev => ({
-        ...prev,
-        [message.id]: !prev[message.id]
-      }));
-    };
-    
-    return (
-      <View style={styles.messageControls}>
-        {isHtmlContent(content) && (
-          <TouchableOpacity 
-            style={[styles.controlButton, isDarkMode && styles.controlButtonDark]}
-            onPress={togglePlainText}
-          >
-            <Ionicons 
-              name={showPlainText ? 'code' : 'document-text'} 
-              size={14} 
-              color={isDarkMode ? '#8ab4f8' : '#1a73e8'} 
-            />
-            <Text style={[styles.controlButtonText, isDarkMode && styles.controlButtonTextDark]}>
-              {showPlainText ? 'Show HTML' : 'Show plain text'}
-            </Text>
-          </TouchableOpacity>
-        )}
-        
-        {message.hasBlockedImages && (
-          <TouchableOpacity 
-            style={[styles.controlButton, isDarkMode && styles.controlButtonDark]}
-            onPress={() => toggleImages(message.id, rawBody)}
-          >
-            <Ionicons 
-              name={showImages ? 'eye-off' : 'eye'} 
-              size={14} 
-              color={isDarkMode ? '#8ab4f8' : '#1a73e8'} 
-            />
-            <Text style={[styles.controlButtonText, isDarkMode && styles.controlButtonTextDark]}>
-              {showImages ? 'Hide images' : 'Show images'}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
-
   const renderMessage = (message: EmailMessage, index: number) => {
     const isExpanded = expandedMessages[message.id] || false;
     const showPlainText = showPlainTextMap[message.id] || false;
@@ -301,265 +251,17 @@ const EmailDetailScreen = () => {
               </Text>
             </View>
             
-            {renderMessageControls(message)}
-            
             <View style={styles.messageBody}>
               {isHtmlContent(content) && !showPlainText ? (
                 <View style={{ minHeight: 100 }}>
-                  <RenderHtml
-                  contentWidth={width - 32}
-                  source={{ html: content }}
-                  ignoredDomTags={['script', 'meta', 'head', 'title', 'html', 'body']}
-                  onHTMLLoaded={(error: any) => {
-                    console.log('HTML loaded');
-                  }}
-                  renderersProps={{
-                    img: {
-                      enableExperimentalPercentWidth: true,
-                    },
-                  }}
-                  defaultViewProps={{
-                    style: {
-                      backgroundColor: 'transparent',
-                    },
-                  }}
-                  baseStyle={{
-                    fontSize: 14,
-                    lineHeight: 20,
-                    color: isDarkMode ? '#e8eaed' : '#3c4043',
-                    fontFamily: 'System',
-                    backgroundColor: 'transparent',
-                  }}
-                  tagsStyles={{
-                    // Gmail-style body
-                    body: {
-                      margin: 0,
-                      padding: 0,
-                      backgroundColor: 'transparent',
-                    },
-                    // Gmail-style paragraphs
-                    p: {
-                      marginTop: 0,
-                      marginBottom: 16,
-                      fontSize: 14,
-                      lineHeight: 20,
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontFamily: 'System',
-                    },
-                    // Gmail-style divs - remove default borders
-                    div: {
-                      fontSize: 14,
-                      lineHeight: 20,
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontFamily: 'System',
-                      marginBottom: 8,
-                      borderWidth: 0,
-                      borderColor: 'transparent',
-                      backgroundColor: 'transparent',
-                    },
-                    // Gmail-style images
-                    img: {
-                      maxWidth: '100%',
-                      height: 'auto',
-                      marginTop: 8,
-                      marginBottom: 8,
-                      borderRadius: 4,
-                    },
-                    // Gmail-style spans
-                    span: {
-                      fontSize: 14,
-                      lineHeight: 20,
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontFamily: 'System',
-                    },
-                    // Gmail-style links
-                    a: {
-                      color: isDarkMode ? '#8ab4f8' : '#1a73e8',
-                      textDecorationLine: 'none',
-                      fontSize: 14,
-                      lineHeight: 20,
-                    },
-                    // Gmail-style headers
-                    h1: {
-                      fontSize: 24,
-                      fontWeight: '400',
-                      lineHeight: 32,
-                      marginTop: 0,
-                      marginBottom: 16,
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontFamily: 'System',
-                    },
-                    h2: {
-                      fontSize: 20,
-                      fontWeight: '400',
-                      lineHeight: 28,
-                      marginTop: 0,
-                      marginBottom: 14,
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontFamily: 'System',
-                    },
-                    h3: {
-                      fontSize: 16,
-                      fontWeight: '500',
-                      lineHeight: 24,
-                      marginTop: 0,
-                      marginBottom: 12,
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontFamily: 'System',
-                    },
-                    h4: {
-                      fontSize: 14,
-                      fontWeight: '500',
-                      lineHeight: 20,
-                      marginTop: 0,
-                      marginBottom: 10,
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontFamily: 'System',
-                    },
-                    // Gmail-style emphasis
-                    strong: {
-                      fontWeight: '500',
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontSize: 14,
-                      lineHeight: 20,
-                    },
-                    b: {
-                      fontWeight: '500',
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontSize: 14,
-                      lineHeight: 20,
-                    },
-                    em: {
-                      fontStyle: 'italic',
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontSize: 14,
-                      lineHeight: 20,
-                    },
-                    i: {
-                      fontStyle: 'italic',
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontSize: 14,
-                      lineHeight: 20,
-                    },
-                    // Gmail-style lists
-                    ul: {
-                      marginTop: 0,
-                      marginBottom: 16,
-                      paddingLeft: 24,
-                    },
-                    ol: {
-                      marginTop: 0,
-                      marginBottom: 16,
-                      paddingLeft: 24,
-                    },
-                    li: {
-                      marginBottom: 4,
-                      fontSize: 14,
-                      lineHeight: 20,
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                      fontFamily: 'System',
-                    },
-                    // Gmail-style blockquotes
-                    blockquote: {
-                      borderLeftWidth: 4,
-                      borderLeftColor: isDarkMode ? '#5f6368' : '#dadce0',
-                      marginTop: 16,
-                      marginBottom: 16,
-                      paddingLeft: 16,
-                      color: isDarkMode ? '#9aa0a6' : '#5f6368',
-                      fontStyle: 'italic',
-                      fontSize: 14,
-                      lineHeight: 20,
-                    },
-                    // Gmail-style tables
-                    table: {
-                      width: '100%',
-                      marginTop: 16,
-                      marginBottom: 16,
-                      fontSize: 14,
-                    },
-                    td: {
-                      padding: 8,
-                      borderWidth: 1,
-                      borderColor: isDarkMode ? '#5f6368' : '#dadce0',
-                      fontSize: 14,
-                      lineHeight: 20,
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                    },
-                    th: {
-                      padding: 8,
-                      borderWidth: 1,
-                      borderColor: isDarkMode ? '#5f6368' : '#dadce0',
-                      backgroundColor: isDarkMode ? '#3c4043' : '#f8f9fa',
-                      fontWeight: '500',
-                      fontSize: 14,
-                      lineHeight: 20,
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                    },
-                    // Gmail-style code
-                    pre: {
-                      backgroundColor: isDarkMode ? '#3c4043' : '#f8f9fa',
-                      borderWidth: 1,
-                      borderColor: isDarkMode ? '#5f6368' : '#dadce0',
-                      borderRadius: 8,
-                      padding: 16,
-                      marginTop: 16,
-                      marginBottom: 16,
-                      fontSize: 13,
-                      lineHeight: 18,
-                      fontFamily: 'System',
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                    },
-                    code: {
-                      backgroundColor: isDarkMode ? '#3c4043' : '#f8f9fa',
-                      borderWidth: 1,
-                      borderColor: isDarkMode ? '#5f6368' : '#dadce0',
-                      borderRadius: 4,
-                      padding: 2,
-                      fontSize: 13,
-                      fontFamily: 'System',
-                      color: isDarkMode ? '#e8eaed' : '#3c4043',
-                    },
-                    // Gmail-style horizontal rules
-                    hr: {
-                      borderWidth: 0,
-                      borderTopWidth: 1,
-                      borderTopColor: isDarkMode ? '#5f6368' : '#dadce0',
-                      marginTop: 24,
-                      marginBottom: 24,
-                    },
-                    // Gmail-style details/summary (for quoted text)
-                    details: {
-                      marginTop: 16,
-                      marginBottom: 16,
-                      borderWidth: 1,
-                      borderColor: isDarkMode ? '#5f6368' : '#dadce0',
-                      borderRadius: 8,
-                    },
-                    summary: {
-                      padding: 12,
-                      backgroundColor: isDarkMode ? '#3c4043' : '#f8f9fa',
-                      fontSize: 13,
-                      fontWeight: '500',
-                      color: isDarkMode ? '#9aa0a6' : '#5f6368',
-                      borderBottomWidth: 1,
-                      borderBottomColor: isDarkMode ? '#5f6368' : '#dadce0',
-                    },
-                    // Blocked image placeholders
-                    '.blocked-image': {
-                      borderWidth: 1,
-                      borderStyle: 'dashed',
-                      borderColor: isDarkMode ? '#5f6368' : '#dadce0',
-                      borderRadius: 8,
-                      padding: 16,
-                      marginTop: 8,
-                      marginBottom: 8,
-                      backgroundColor: isDarkMode ? '#3c4043' : '#f8f9fa',
-                      alignItems: 'center',
-                    },
-                  }}
-                  systemFonts={['System']}
-                />
+                  <EmailRenderer
+                    html={content}
+                    plainText={message.plainTextContent}
+                    onLinkPress={(url) => {
+                      // Handle link press
+                      console.log('Link pressed:', url);
+                    }}
+                  />
                 </View>
               ) : (
                 <Text style={[styles.bodyText, isDarkMode && styles.bodyTextDark]}>
@@ -866,34 +568,6 @@ const styles = StyleSheet.create({
   },
   subjectTextDark: {
     color: '#e8eaed',
-  },
-  messageControls: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  controlButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e8eaed',
-  },
-  controlButtonDark: {
-    backgroundColor: '#303134',
-    borderColor: '#5f6368',
-  },
-  controlButtonText: {
-    fontSize: 13,
-    color: '#1a73e8',
-    fontWeight: '500',
-    marginLeft: 6,
-  },
-  controlButtonTextDark: {
-    color: '#8ab4f8',
   },
   messageBody: {
     minHeight: 50,
