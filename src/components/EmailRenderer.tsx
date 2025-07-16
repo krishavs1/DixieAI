@@ -57,89 +57,118 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
     if (renderMethod === 'webview') return true;
     if (renderMethod === 'native') return false;
     
-    // Auto mode: use WebView for complex emails
-    return emailAnalysis.complexity >= 3 || emailAnalysis.imageCount > 2;
-  }, [emailAnalysis, renderMethod]);
+    // Auto mode: use WebView for any "real" HTML emails with tables or styles
+    return html.includes('<table') || html.includes('<style') || emailAnalysis.complexity >= 3 || emailAnalysis.imageCount > 2;
+  }, [html, emailAnalysis, renderMethod]);
 
-  // WebView CSS for email styling
+  // WebView CSS for email styling - cleaned up per ChatGPT suggestions
   const webViewCSS = `
     html, body {
       margin: 0;
-      padding: 16px;
-      background-color: ${isDarkMode ? '#202124' : '#ffffff'};
+      padding: 0;
+      background: ${isDarkMode ? '#202124' : '#fff'};
       color: ${isDarkMode ? '#e8eaed' : '#202124'};
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
       line-height: 1.4;
-      word-wrap: break-word;
-      min-height: 100vh;
-      width: 100%;
       overflow-x: hidden;
     }
-    
-    /* Reset all backgrounds to ensure content is visible */
-    * {
-      background-color: transparent !important;
+
+    .email-container {
+      padding: 16px;
+      width: 100%;
+      box-sizing: border-box;
     }
-    
-    /* Ensure body has proper background */
-    body {
-      background-color: ${isDarkMode ? '#202124' : '#ffffff'} !important;
+
+    /* Remove excessive top spacing from email content */
+    .email-content > * {
+      margin-top: 0 !important;
+      padding-top: 0 !important;
     }
-    
-    /* Force all content to fit screen width */
-    * {
-      max-width: 100% !important;
-      box-sizing: border-box !important;
+
+    /* Target common email spacer elements */
+    .email-content > div:empty,
+    .email-content > table:empty,
+    .email-content > td:empty,
+    .email-content > tr:empty {
+      display: none !important;
     }
-    
-    /* Make tables responsive */
-    table {
-      width: 100% !important;
-      max-width: 100% !important;
+
+    /* Remove top margins from first elements */
+    .email-content > *:first-child {
+      margin-top: 0 !important;
+      padding-top: 0 !important;
     }
-    
-    /* Force images to scale properly */
-    img {
-      max-width: 100% !important;
-      width: auto !important;
-      height: auto !important;
+
+    /* Target spacer images */
+    img[src*="spacer"],
+    img[alt*="spacer"],
+    img[width="1"],
+    img[height="1"] {
+      display: none !important;
     }
-    
-    /* Email-specific styling */
+
     img {
       max-width: 100%;
       height: auto;
-      border-radius: 4px;
       display: block;
-      background-color: transparent !important;
+      border-radius: 4px;
     }
-    
-    /* Ensure email content is visible */
-    div, p, span, h1, h2, h3, h4, h5, h6 {
-      background-color: transparent !important;
-      color: ${isDarkMode ? '#e8eaed' : '#202124'} !important;
+
+    table {
+      width: 100% !important;
+      table-layout: auto !important;
+      border-collapse: collapse !important; 
     }
-    
-    /* Handle email-specific background colors */
-    [style*="background-color"] {
-      background-color: inherit !important;
+
+    td, th {
+      padding: 0 !important;
+      border: none !important;
     }
-    
-    /* Ensure text is visible */
-    * {
-      color: inherit;
+
+    /* Only target specific email wrapper tables, not all tables */
+    table[role="presentation"] td,
+    table[role="presentation"] th {
+      border: none !important;
+      padding: 0 !important;
     }
-    
+
+    /* Target common email wrapper classes */
+    .background-base,
+    .background-base td,
+    .background-base th {
+      border: none !important;
+      padding: 0 !important;
+    }
+
+    [class*="w100pc"] td,
+    [class*="w100pc"] th {
+      border: none !important;
+      padding: 0 !important;
+    }
+
+    /* Gmail-specific wrapper classes */
+    [class*="m_-"] table {
+      border: none !important;
+    }
+
+    [class*="m_-"] td,
+    [class*="m_-"] th {
+      border: none !important;
+    }
+
+    /* Links */
     a {
       color: ${isDarkMode ? '#8ab4f8' : '#1a73e8'};
       text-decoration: none;
     }
-    
+
+    /* Paragraphs */
     p {
       margin-bottom: 1em;
     }
-    
+
+    /* Blockquotes */
     blockquote {
       border-left: 4px solid ${isDarkMode ? '#5f6368' : '#dadce0'};
       margin: 1em 0;
@@ -147,83 +176,6 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
       font-style: italic;
       color: ${isDarkMode ? '#9aa0a6' : '#5f6368'};
     }
-    
-    /* Hide table borders for email layout */
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 0;
-      border: none;
-    }
-    
-    td, th {
-      border: none;
-      padding: 0;
-      text-align: left;
-      background: transparent;
-    }
-    
-    /* Remove borders from email-specific table layouts */
-    table[role="presentation"] {
-      border: none;
-    }
-    
-    table[role="presentation"] td,
-    table[role="presentation"] th {
-      border: none;
-      padding: 0;
-    }
-    
-    /* Hide borders from email wrapper tables */
-    .background-base {
-      border: none;
-    }
-    
-    .background-base td,
-    .background-base th {
-      border: none;
-      padding: 0;
-    }
-    
-    /* Remove borders from button containers */
-    .button-primary,
-    .button-tertiary {
-      border: none;
-    }
-    
-    /* Clean up email-specific elements */
-    [class*="w100pc"] {
-      border: none;
-    }
-    
-    [class*="w100pc"] td,
-    [class*="w100pc"] th {
-      border: none;
-      padding: 0;
-    }
-    
-    /* Remove borders from all table elements */
-    * {
-      border: none !important;
-    }
-    
-    /* Exception: only show borders for actual content tables */
-    table:not([role="presentation"]) {
-      border: 1px solid ${isDarkMode ? '#5f6368' : '#dadce0'};
-    }
-    
-    table:not([role="presentation"]) td,
-    table:not([role="presentation"]) th {
-      border: 1px solid ${isDarkMode ? '#5f6368' : '#dadce0'};
-      padding: 8px;
-    }
-    
-    /* Dark mode adjustments */
-    ${isDarkMode ? `
-      * {
-        border-color: #5f6368 !important;
-      }
-    ` : ''}
   `;
 
   // Native rendering styles (Gmail-like)
@@ -447,13 +399,15 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
       <!DOCTYPE html>
       <html>
         <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=yes">
           <meta charset="utf-8">
           <style>${webViewCSS}</style>
         </head>
         <body>
-          <div style="background-color: ${isDarkMode ? '#202124' : '#ffffff'}; color: ${isDarkMode ? '#e8eaed' : '#202124'}; width: 100%; max-width: 100%; overflow-x: hidden;">
-            ${html}
+          <div class="email-container">
+            <div class="email-content" style="background-color: ${isDarkMode ? '#202124' : '#ffffff'}; color: ${isDarkMode ? '#e8eaed' : '#202124'};">
+              ${html}
+            </div>
           </div>
         </body>
       </html>
@@ -468,6 +422,8 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
           style={styles.webView}
           scrollEnabled={true}
           showsVerticalScrollIndicator={true}
+          showsHorizontalScrollIndicator={false}
+          scalesPageToFit={true}
           onShouldStartLoadWithRequest={(event) => {
             if (event.url.startsWith('http')) {
               handleLinkPress(event.url);
@@ -487,10 +443,39 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
             console.log('WebView message:', event.nativeEvent.data);
           }}
           injectedJavaScript={`
-            // Debug: log the content
             console.log('WebView content loaded');
-            console.log('Body content:', document.body.innerHTML);
-            console.log('Body background:', document.body.style.backgroundColor);
+            
+            // Remove empty spacer elements that cause top whitespace
+            const emailContent = document.querySelector('.email-content');
+            if (emailContent) {
+              // Remove empty divs, tables, and spacer images at the top
+              const children = Array.from(emailContent.children);
+              for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                
+                // Remove empty elements
+                if (!child.textContent.trim() && !child.querySelector('img')) {
+                  child.style.display = 'none';
+                  continue;
+                }
+                
+                // Remove spacer images
+                const imgs = child.querySelectorAll('img');
+                imgs.forEach(img => {
+                  if (img.width <= 1 || img.height <= 1 || 
+                      img.src.includes('spacer') || 
+                      img.alt.includes('spacer')) {
+                    img.style.display = 'none';
+                  }
+                });
+                
+                // If we found content, break the loop
+                if (child.textContent.trim() || child.querySelector('img:not([style*="display: none"])')) {
+                  break;
+                }
+              }
+            }
+            
             true;
           `}
         />
@@ -591,6 +576,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
     minHeight: 400,
+    width: '100%',
+    maxWidth: '100%',
   },
   plainText: {
     padding: 16,
