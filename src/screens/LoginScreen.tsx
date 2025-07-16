@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,15 +18,94 @@ import { API_CONFIG } from '../config/api';
 
 const { width } = Dimensions.get('window');
 
+// Helper function to create a fetch with timeout
+const fetchWithTimeout = async (url: string, options: RequestInit, timeout: number = 30000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Request timed out');
+    }
+    throw error;
+  }
+};
+
+// Helper function to retry failed requests
+const retryFetch = async (
+  fetchFn: () => Promise<Response>,
+  maxRetries: number = 2,
+  delay: number = 1000
+): Promise<Response> => {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchFn();
+    } catch (error) {
+      lastError = error as Error;
+      
+      if (attempt === maxRetries) {
+        throw lastError;
+      }
+      
+      // Wait before retrying (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, attempt)));
+    }
+  }
+  
+  throw lastError!;
+};
+
 const LoginScreen = () => {
   const authContext = useContext(AuthContext);
   const [loading, setLoading] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
 
   if (!authContext) {
     throw new Error('LoginScreen must be used within an AuthProvider');
   }
 
   const { setToken, setUser } = authContext;
+
+  // Check backend connectivity on component mount
+  useEffect(() => {
+    checkBackendConnectivity();
+  }, []);
+
+  const checkBackendConnectivity = async () => {
+    try {
+      console.log('Checking backend connectivity on startup...');
+      const healthCheck = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/health`, {
+        method: 'GET',
+      }, 5000);
+      
+      if (healthCheck.ok) {
+        console.log('Backend is connected');
+        setBackendStatus('connected');
+      } else {
+        console.log('Backend health check failed with status:', healthCheck.status);
+        setBackendStatus('disconnected');
+      }
+    } catch (error) {
+      console.log('Backend connectivity check failed:', error);
+      setBackendStatus('disconnected');
+      
+      showMessage({
+        message: 'Backend server is not reachable. Please ensure the server is running.',
+        type: 'warning',
+        duration: 5000,
+      });
+    }
+  };
 
   const GoogleLogin = async () => {
     await GoogleSignin.hasPlayServices();
@@ -38,6 +117,20 @@ const LoginScreen = () => {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
+      console.log('Starting Google login process...');
+      
+      // First, check if backend is reachable
+      console.log('Checking backend connectivity...');
+      try {
+        const healthCheck = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/health`, {
+          method: 'GET',
+        }, 5000);
+        console.log('Backend health check status:', healthCheck.status);
+      } catch (healthError) {
+        console.log('Backend health check failed:', healthError);
+        throw new Error('Backend server is not reachable. Please check if the server is running.');
+      }
+      
       const response = await GoogleLogin(); // Google sign-in
       const idToken = response.data?.idToken; // Get idToken from response.data
       
@@ -49,20 +142,30 @@ const LoginScreen = () => {
       console.log('accessToken:', accessToken); // Log accessToken
 
       if (idToken) {
-        // Send idToken and accessToken to the backend (following YouTube tutorial approach)
-        const backendResponse = await fetch(`${API_CONFIG.BASE_URL}/api/auth/google/mobile`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            idToken: idToken, // Sending the idToken like in the tutorial
-            accessToken: accessToken, // Also send access token for Gmail API
-          }),
-        });
+        console.log('Attempting to authenticate with backend...');
+        console.log('Backend URL:', `${API_CONFIG.BASE_URL}/api/auth/google/mobile`);
+        
+        // Send idToken and accessToken to the backend with timeout and retry logic
+        const backendResponse = await retryFetch(() =>
+          fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/auth/google/mobile`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              idToken: idToken, // Sending the idToken like in the tutorial
+              accessToken: accessToken, // Also send access token for Gmail API
+            }),
+          }, 30000) // 30 second timeout for authentication
+        );
+
+        console.log('Backend response status:', backendResponse.status);
+        console.log('Backend response ok:', backendResponse.ok);
 
         if (!backendResponse.ok) {
-          throw new Error('Backend authentication failed');
+          const errorText = await backendResponse.text();
+          console.log('Backend error response:', errorText);
+          throw new Error(`Backend authentication failed: ${backendResponse.status} - ${errorText}`);
         }
 
         const data = await backendResponse.json();
@@ -84,8 +187,24 @@ const LoginScreen = () => {
       }
     } catch (error: any) {
       console.log('Login Error:', error);
+      console.log('Error message:', error.message);
+      console.log('Error stack:', error.stack);
+      
+      let errorMessage = 'Authentication failed. Please try again.';
+      
+      // Provide more specific error messages
+      if (error.message.includes('Backend server is not reachable')) {
+        errorMessage = 'Backend server is not running. Please start the server and try again.';
+      } else if (error.message.includes('Request timed out') || error.message.includes('Network request timed out')) {
+        errorMessage = 'Connection timeout. Please check your internet connection and try again.';
+      } else if (error.message.includes('Network Error') || error.message.includes('fetch')) {
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (error.message.includes('Backend authentication failed')) {
+        errorMessage = 'Server authentication failed. Please try again.';
+      }
+      
       showMessage({
-        message: 'Authentication failed. Please try again.',
+        message: errorMessage,
         type: 'danger',
       });
     } finally {
@@ -111,15 +230,39 @@ const LoginScreen = () => {
       {/* Login Button */}
       <View style={styles.loginContainer}>
         <TouchableOpacity
-          style={styles.googleButton}
+          style={[
+            styles.googleButton,
+            (loading || backendStatus === 'disconnected') && styles.disabledButton
+          ]}
           onPress={handleGoogleLogin}
-          disabled={loading}
+          disabled={loading || backendStatus === 'disconnected'}
         >
           <Ionicons name="logo-google" size={24} color="#4285F4" />
           <Text style={styles.googleButtonText}>
             {loading ? 'Signing in...' : 'Sign in with Google'}
           </Text>
         </TouchableOpacity>
+        
+        {/* Backend Status Indicator */}
+        <View style={styles.statusContainer}>
+          <View style={[
+            styles.statusIndicator,
+            backendStatus === 'connected' && styles.statusConnected,
+            backendStatus === 'disconnected' && styles.statusDisconnected,
+            backendStatus === 'checking' && styles.statusChecking,
+          ]} />
+          <Text style={styles.statusText}>
+            {backendStatus === 'checking' && 'Checking server...'}
+            {backendStatus === 'connected' && 'Server connected'}
+            {backendStatus === 'disconnected' && 'Server disconnected'}
+          </Text>
+        </View>
+        
+        {backendStatus === 'disconnected' && (
+          <TouchableOpacity style={styles.retryButton} onPress={checkBackendConnectivity}>
+            <Text style={styles.retryButtonText}>Retry Connection</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Footer */}
@@ -199,6 +342,49 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     lineHeight: 16,
+  },
+  disabledButton: {
+    opacity: 0.7,
+    backgroundColor: '#e0e0e0',
+    borderColor: '#ccc',
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  statusIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  statusConnected: {
+    backgroundColor: '#4CAF50', // Green
+  },
+  statusDisconnected: {
+    backgroundColor: '#F44336', // Red
+  },
+  statusChecking: {
+    backgroundColor: '#FF9800', // Orange
+  },
+  statusText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  retryButton: {
+    backgroundColor: '#007bff',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignSelf: 'center',
+    marginTop: 10,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

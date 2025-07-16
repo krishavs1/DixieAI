@@ -1,5 +1,20 @@
+// Helper function to get the local IP address
+const getLocalIPAddress = (): string => {
+  // Common local IP ranges - you can add more if needed
+  const possibleIPs = [
+    '192.168.1.209', // Your current IP
+    '172.20.214.39', // Your previous IP
+    'localhost',
+    '127.0.0.1',
+  ];
+  
+  // For now, return the current working IP
+  // In a production app, you might want to implement dynamic IP detection
+  return '192.168.1.209';
+};
+
 export const API_CONFIG = {
-  BASE_URL: __DEV__ ? 'http://172.20.214.39:3000' : 'https://your-backend-url.com',
+  BASE_URL: __DEV__ ? `http://${getLocalIPAddress()}:3000` : 'https://your-backend-url.com',
   ENDPOINTS: {
     AUTH: {
       GOOGLE_URL: '/api/auth/google/url',
@@ -12,7 +27,7 @@ export const API_CONFIG = {
       SEND: '/api/email/send',
     },
   },
-  TIMEOUT: 10000, // 10 seconds
+  TIMEOUT: 30000, // 30 seconds - increased for Gmail API calls
 };
 
 export const GOOGLE_CONFIG = {

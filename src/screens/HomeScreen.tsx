@@ -21,6 +21,7 @@ const HomeScreen = () => {
   const authContext = useContext(AuthContext);
   const [threads, setThreads] = useState<EmailThread[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingSlow, setIsLoadingSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -39,23 +40,45 @@ const HomeScreen = () => {
 
   const fetchThreads = async () => {
     setIsLoading(true);
+    setIsLoadingSlow(false);
     setError(null);
+    
+    // Show "slow loading" message after 5 seconds
+    const slowLoadingTimer = setTimeout(() => {
+      setIsLoadingSlow(true);
+    }, 5000);
+    
     try {
       const fetchedThreads = await emailService.fetchThreads(token);
       setThreads(fetchedThreads);
     } catch (err: any) {
-      const errorMessage = err.message || 'Failed to fetch emails';
+      let errorMessage = err.message || 'Failed to fetch emails';
+      
+      // Provide more user-friendly error messages
+      if (errorMessage.includes('Request timed out') || errorMessage.includes('Network request timed out')) {
+        errorMessage = 'Request timed out. Please check your internet connection and try again.';
+      } else if (errorMessage.includes('Network Error') || errorMessage.includes('fetch')) {
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (errorMessage.includes('Authentication failed') || errorMessage.includes('Please log in again')) {
+        errorMessage = 'Your session has expired. Please log in again.';
+      }
+      
       setError(errorMessage);
       console.error('Error fetching threads:', err);
       
       // Check if it's an authentication error
-      if (errorMessage.includes('Authentication failed') || errorMessage.includes('Please log in again')) {
+      if (errorMessage.includes('session has expired')) {
         showMessage({
           message: 'Your session has expired. Please log in again.',
           type: 'warning',
         });
         // Automatically log out the user
         logout();
+      } else if (errorMessage.includes('timed out') || errorMessage.includes('Network error')) {
+        showMessage({
+          message: 'Connection timeout. Please try again.',
+          type: 'warning',
+        });
       } else {
         showMessage({
           message: 'Failed to load emails',
@@ -63,7 +86,9 @@ const HomeScreen = () => {
         });
       }
     } finally {
+      clearTimeout(slowLoadingTimer);
       setIsLoading(false);
+      setIsLoadingSlow(false);
     }
   };
 
@@ -206,7 +231,14 @@ const HomeScreen = () => {
       {isLoading && threads.length === 0 && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#4285F4" />
-          <Text style={styles.loadingText}>Loading emails...</Text>
+          <Text style={styles.loadingText}>
+            {isLoadingSlow ? 'Loading emails... (This may take a moment)' : 'Loading emails...'}
+          </Text>
+          {isLoadingSlow && (
+            <Text style={styles.loadingSubtext}>
+              Gmail API can be slow sometimes. Please be patient.
+            </Text>
+          )}
         </View>
       )}
     </SafeAreaView>
@@ -396,6 +428,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     color: '#666',
+  },
+  loadingSubtext: {
+    marginTop: 5,
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
   },
 });
 
