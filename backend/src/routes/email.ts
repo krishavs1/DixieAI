@@ -50,7 +50,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     
     const response = await gmail.users.threads.list({
       userId: 'me',
-      maxResults: 20, // Reduced from 50 to improve performance
+      maxResults: 50, // Increased from 20 to 50 threads
       q: req.query.q as string || '',
     });
 
@@ -58,7 +58,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     
     // Use batch requests to get thread metadata more efficiently
     const threadsWithPreview = await Promise.allSettled(
-      threads.slice(0, 10).map(async (thread) => { // Limit to first 10 threads for better performance
+      threads.slice(0, 20).map(async (thread) => { // Still limit detailed processing to first 20 for performance
         try {
           const threadData = await withTimeout(
             gmail.users.threads.get({
