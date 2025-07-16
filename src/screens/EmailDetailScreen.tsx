@@ -72,7 +72,12 @@ const EmailDetailScreen = () => {
 
   const processEmailContent = async (messageId: string, rawBody: string, shouldLoadImages: boolean) => {
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/api/email/process`, {
+      // Get the dynamic base URL
+      const baseURL = typeof API_CONFIG.BASE_URL === 'string' 
+        ? API_CONFIG.BASE_URL 
+        : await API_CONFIG.BASE_URL;
+        
+      const response = await fetch(`${baseURL}/api/email/process`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

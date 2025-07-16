@@ -14,7 +14,7 @@ import { GoogleSignin } from '../config/googleSignIn';
 import { AuthContext } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showMessage } from 'react-native-flash-message';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, clearBackendURLCache } from '../config/api';
 
 const { width } = Dimensions.get('window');
 
@@ -79,12 +79,31 @@ const LoginScreen = () => {
   // Check backend connectivity on component mount
   useEffect(() => {
     checkBackendConnectivity();
+    
+    // Listen for network changes
+    // const unsubscribe = NetInfo.addEventListener(state => {
+    //   if (state.isConnected && state.isInternetReachable) {
+    //     console.log('�� Network connected, clearing backend cache and rechecking...');
+    //     clearBackendURLCache();
+    //     checkBackendConnectivity();
+    //   }
+    // });
+
+    // return () => unsubscribe();
   }, []);
 
   const checkBackendConnectivity = async () => {
     try {
       console.log('Checking backend connectivity on startup...');
-      const healthCheck = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/health`, {
+      
+      // Get the dynamic base URL
+      const baseURL = typeof API_CONFIG.BASE_URL === 'string' 
+        ? API_CONFIG.BASE_URL 
+        : await API_CONFIG.BASE_URL;
+        
+      console.log('Testing backend at:', baseURL);
+      
+      const healthCheck = await fetchWithTimeout(`${baseURL}/health`, {
         method: 'GET',
       }, 5000);
       
@@ -122,10 +141,19 @@ const LoginScreen = () => {
       // First, check if backend is reachable
       console.log('Checking backend connectivity...');
       try {
-        const healthCheck = await fetchWithTimeout(`${API_CONFIG.BASE_URL}/health`, {
+        const baseURL = typeof API_CONFIG.BASE_URL === 'string' 
+          ? API_CONFIG.BASE_URL 
+          : await API_CONFIG.BASE_URL;
+          
+        const healthCheck = await fetchWithTimeout(`${baseURL}/health`, {
           method: 'GET',
         }, 5000);
-        console.log('Backend health check status:', healthCheck.status);
+        
+        if (!healthCheck.ok) {
+          throw new Error('Backend health check failed');
+        }
+        
+        console.log('Backend health check passed');
       } catch (healthError) {
         console.log('Backend health check failed:', healthError);
         throw new Error('Backend server is not reachable. Please check if the server is running.');
@@ -143,11 +171,17 @@ const LoginScreen = () => {
 
       if (idToken) {
         console.log('Attempting to authenticate with backend...');
-        console.log('Backend URL:', `${API_CONFIG.BASE_URL}/api/auth/google/mobile`);
+        
+        // Get the dynamic base URL
+        const baseURL = typeof API_CONFIG.BASE_URL === 'string' 
+          ? API_CONFIG.BASE_URL 
+          : await API_CONFIG.BASE_URL;
+          
+        console.log('Backend URL:', `${baseURL}/api/auth/google/mobile`);
         
         // Send idToken and accessToken to the backend with timeout and retry logic
         const backendResponse = await retryFetch(() =>
-          fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/auth/google/mobile`, {
+          fetchWithTimeout(`${baseURL}/api/auth/google/mobile`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -256,6 +290,15 @@ const LoginScreen = () => {
             {backendStatus === 'connected' && 'Server connected'}
             {backendStatus === 'disconnected' && 'Server disconnected'}
           </Text>
+          <TouchableOpacity 
+            style={styles.refreshStatusButton} 
+            onPress={() => {
+              clearBackendURLCache();
+              checkBackendConnectivity();
+            }}
+          >
+            <Ionicons name="refresh" size={16} color="#666" />
+          </TouchableOpacity>
         </View>
         
         {backendStatus === 'disconnected' && (
@@ -372,6 +415,9 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 14,
     color: '#666',
+  },
+  refreshStatusButton: {
+    marginLeft: 10,
   },
   retryButton: {
     backgroundColor: '#007bff',

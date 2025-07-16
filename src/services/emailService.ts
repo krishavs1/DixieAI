@@ -83,11 +83,20 @@ const retryFetch = async (
   throw lastError!;
 };
 
+// Helper function to get the base URL dynamically
+const getBaseURL = async (): Promise<string> => {
+  if (typeof API_CONFIG.BASE_URL === 'string') {
+    return API_CONFIG.BASE_URL;
+  }
+  return await API_CONFIG.BASE_URL;
+};
+
 export const emailService = {
   async fetchThreads(token: string): Promise<EmailThread[]> {
     try {
+      const baseURL = await getBaseURL();
       const response = await retryFetch(() =>
-        fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/email/threads`, {
+        fetchWithTimeout(`${baseURL}/api/email/threads`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -113,8 +122,9 @@ export const emailService = {
 
   async searchThreads(token: string, query: string): Promise<EmailThread[]> {
     try {
+      const baseURL = await getBaseURL();
       const response = await retryFetch(() =>
-        fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/email/threads?q=${encodeURIComponent(query)}`, {
+        fetchWithTimeout(`${baseURL}/api/email/threads?q=${encodeURIComponent(query)}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -140,8 +150,9 @@ export const emailService = {
 
   async getThread(token: string, threadId: string): Promise<DetailedEmailThread | null> {
     try {
+      const baseURL = await getBaseURL();
       const response = await retryFetch(() =>
-        fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/email/threads/${threadId}`, {
+        fetchWithTimeout(`${baseURL}/api/email/threads/${threadId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -172,8 +183,9 @@ export const emailService = {
     threadId?: string;
   }): Promise<void> {
     try {
+      const baseURL = await getBaseURL();
       const response = await retryFetch(() =>
-        fetchWithTimeout(`${API_CONFIG.BASE_URL}/api/email/send`, {
+        fetchWithTimeout(`${baseURL}/api/email/send`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
