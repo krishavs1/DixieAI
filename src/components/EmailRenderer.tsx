@@ -107,41 +107,46 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
 
   // WebView CSS for email styling - aggressive margin/padding removal
   const webViewCSS = `
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow-x: hidden;
-    }
-
-    .email-container {
-      margin: 0 !important;
-      padding: 0 8px !important;
-    }
-
-    .email-content {
+    /* reset page */
+    html, body, .email-container, .email-content {
       margin: 0 !important;
       padding: 0 !important;
+      overflow-x: hidden !important;
     }
 
-    .email-content > * {
-      margin: 0 !important;
+    /* hide any completely empty "stylingblock" wrappers (preheader cruft) */
+    .email-content .stylingblock-content-wrapper.camarker-inner:empty {
+      display: none !important;
+    }
+
+    /* cancel Gmail's built‑in .gmail-content padding */
+    .email-content .gmail-content {
       padding: 0 !important;
+      margin: 0 !important;
     }
 
+    /* stack the two top cells (Dunkin' logo + points bar) full‑width */
+    .email-content td.responsive-td,
+    .email-content .displayBlock.text-center,
+    .email-content .text-center.paddingBottom10 {
+      display: block !important;
+      width: 100%   !important;
+    }
+
+    /* leave inner presentation tables at their natural width */
+    .email-content table[role="presentation"] {
+      table-layout: auto !important;
+      width:        auto !important;
+    }
+
+    /* your existing globals */
     img {
       max-width: 100% !important;
-      height: auto !important;
-      display: block !important;
+      height: auto    !important;
+      display: block  !important;
     }
-
-    table {
-      width: 100% !important;
-      table-layout: auto !important;
-      border-collapse: collapse !important;
-    }
-
     td, th {
-      padding: 0 !important;
+      padding: 0   !important;
       border: none !important;
     }
   `;
@@ -521,25 +526,29 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
               }
             }}
             injectedJavaScript={`
-              console.log('WebView content loaded');
-              
-              // Measure the actual content height and send it to React Native
-              const measureHeight = () => {
-                const height = Math.max(
+              // 1) hide any truly empty pre‑header blocks
+              document.querySelectorAll('.stylingblock-content-wrapper.camarker-inner').forEach(el => {
+                if (!el.textContent.trim()) el.style.display = 'none';
+              });
+
+              // 2) force those two top cells to stack
+              document.querySelectorAll('.responsive-td, .displayBlock.text-center, .text-center.paddingBottom10')
+                .forEach(td => {
+                  td.style.display = 'block';
+                  td.style.width   = '100%';
+                });
+
+              // 3) measure height
+              (function measure(){
+                const h = Math.max(
                   document.documentElement.scrollHeight,
-                  document.body.scrollHeight,
-                  document.documentElement.offsetHeight,
-                  document.body.offsetHeight
+                  document.body.scrollHeight
                 );
-                window.ReactNativeWebView.postMessage(height.toString());
-              };
-              
-              // Measure immediately
-              measureHeight();
-              
-              // Also measure after images load
-              setTimeout(measureHeight, 100);
-              setTimeout(measureHeight, 500);
+                window.ReactNativeWebView.postMessage(h.toString());
+              })();
+              // also re‑measure after images load
+              window.addEventListener('load', measure);
+              setTimeout(measure, 500);
               
               true;
             `}
