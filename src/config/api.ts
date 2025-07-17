@@ -9,8 +9,8 @@ const getLocalIPAddress = (): string => {
   // and let the health check determine which one works
   
   const possibleIPs = [
-    '192.168.1.209', // Your current IP
-    '172.20.214.39', // Your previous IP
+    '172.20.214.39', // Your current IP
+    '192.168.1.209', // Your previous IP
     'localhost',
     '127.0.0.1',
     '10.0.0.1',
@@ -20,7 +20,7 @@ const getLocalIPAddress = (): string => {
   
   // For now, return the most likely one
   // The health check will determine if it's correct
-  return '192.168.1.209';
+  return '172.20.214.39';
 };
 
 // Cache for the discovered backend URL
@@ -131,6 +131,9 @@ export const clearBackendURLCache = () => {
   lastDiscoveryTime = 0;
   console.log('🔄 Backend URL cache cleared');
 };
+
+// Clear cache on import to force rediscovery
+clearBackendURLCache();
 
 export const API_CONFIG = {
   get BASE_URL() {
