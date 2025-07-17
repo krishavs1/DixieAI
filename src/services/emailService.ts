@@ -97,10 +97,10 @@ export const emailService = {
       const baseURL = await getBaseURL();
       const response = await retryFetch(() =>
         fetchWithTimeout(`${baseURL}/api/email/threads`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         }, API_CONFIG.TIMEOUT)
       );
 
@@ -125,10 +125,10 @@ export const emailService = {
       const baseURL = await getBaseURL();
       const response = await retryFetch(() =>
         fetchWithTimeout(`${baseURL}/api/email/threads?q=${encodeURIComponent(query)}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         }, API_CONFIG.TIMEOUT)
       );
 
@@ -153,10 +153,10 @@ export const emailService = {
       const baseURL = await getBaseURL();
       const response = await retryFetch(() =>
         fetchWithTimeout(`${baseURL}/api/email/threads/${threadId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         }, API_CONFIG.TIMEOUT * 2) // Give more time for detailed thread fetching
       );
 
@@ -186,12 +186,12 @@ export const emailService = {
       const baseURL = await getBaseURL();
       const response = await retryFetch(() =>
         fetchWithTimeout(`${baseURL}/api/email/send`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(emailData),
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData),
         }, API_CONFIG.TIMEOUT)
       );
 

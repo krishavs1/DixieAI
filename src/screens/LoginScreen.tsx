@@ -182,14 +182,14 @@ const LoginScreen = () => {
         // Send idToken and accessToken to the backend with timeout and retry logic
         const backendResponse = await retryFetch(() =>
           fetchWithTimeout(`${baseURL}/api/auth/google/mobile`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              idToken: idToken, // Sending the idToken like in the tutorial
-              accessToken: accessToken, // Also send access token for Gmail API
-            }),
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            idToken: idToken, // Sending the idToken like in the tutorial
+            accessToken: accessToken, // Also send access token for Gmail API
+          }),
           }, 30000) // 30 second timeout for authentication
         );
 

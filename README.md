@@ -49,22 +49,22 @@ If the automatic detection fails:
 ### Installation
 
 1. **Clone the repository**
-   ```bash
+```bash
    git clone <repository-url>
    cd DixieAI
    ```
 
 2. **Install dependencies**
    ```bash
-   npm install
-   ```
+npm install
+```
 
 3. **Start the backend server**
-   ```bash
-   cd backend
+```bash
+cd backend
    npm install
-   npm start
-   ```
+npm start
+```
 
 4. **Start the mobile app**
    ```bash

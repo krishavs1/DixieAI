@@ -261,7 +261,7 @@ const EmailDetailScreen = () => {
                       // Handle link press
                       console.log('Link pressed:', url);
                     }}
-                  />
+                />
                 </View>
               ) : (
                 <Text style={[styles.bodyText, isDarkMode && styles.bodyTextDark]}>

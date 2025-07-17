@@ -62,10 +62,10 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
         try {
           const threadData = await withTimeout(
             gmail.users.threads.get({
-              userId: 'me',
-              id: thread.id!,
-              format: 'metadata',
-              metadataHeaders: ['From', 'Subject', 'Date'],
+            userId: 'me',
+            id: thread.id!,
+            format: 'metadata',
+            metadataHeaders: ['From', 'Subject', 'Date'],
             }),
             10000 // 10 second timeout for each thread metadata request
           );
@@ -126,8 +126,8 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
     
     const response = await withTimeout(
       gmail.users.threads.get({
-        userId: 'me',
-        id: threadId,
+      userId: 'me',
+      id: threadId,
       }),
       20000 // 20 second timeout for detailed thread fetching
     );
@@ -139,71 +139,71 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
     const processedMessages = await Promise.allSettled(
       messages.map(async (message) => {
         try {
-          const headers = message.payload?.headers || [];
-          const from = headers.find(h => h.name === 'From')?.value || '';
-          const subject = headers.find(h => h.name === 'Subject')?.value || '';
-          const date = headers.find(h => h.name === 'Date')?.value || '';
-          
-          // Extract raw HTML body using our email processor
-          let rawBody = extractEmailBody(message.payload);
-          
-          // If no HTML body found, try to get plain text and convert to HTML
-          if (!rawBody && message.payload?.parts) {
-            const textPart = message.payload.parts.find(part => part.mimeType === 'text/plain');
-            if (textPart?.body?.data) {
-              const plainText = Buffer.from(textPart.body.data, 'base64').toString();
-              rawBody = plainText.replace(/\n/g, '<br>');
-            }
+        const headers = message.payload?.headers || [];
+        const from = headers.find(h => h.name === 'From')?.value || '';
+        const subject = headers.find(h => h.name === 'Subject')?.value || '';
+        const date = headers.find(h => h.name === 'Date')?.value || '';
+        
+        // Extract raw HTML body using our email processor
+        let rawBody = extractEmailBody(message.payload);
+        
+        // If no HTML body found, try to get plain text and convert to HTML
+        if (!rawBody && message.payload?.parts) {
+          const textPart = message.payload.parts.find(part => part.mimeType === 'text/plain');
+          if (textPart?.body?.data) {
+            const plainText = Buffer.from(textPart.body.data, 'base64').toString();
+            rawBody = plainText.replace(/\n/g, '<br>');
           }
-          
+        }
+        
           // Process inline images with timeout
-          const inlineImages = findInlineImages(message.payload);
-          const attachmentMap = new Map<string, string>();
-          
+        const inlineImages = findInlineImages(message.payload);
+        const attachmentMap = new Map<string, string>();
+        
           // Fetch inline image data with timeout
-          for (const img of inlineImages) {
-            try {
+        for (const img of inlineImages) {
+          try {
               const attachment = await withTimeout(
                 gmail.users.messages.attachments.get({
-                  userId: 'me',
-                  messageId: message.id!,
-                  id: img.id,
+              userId: 'me',
+              messageId: message.id!,
+              id: img.id,
                 }),
                 5000 // 5 second timeout for each attachment
               );
-              
-              if (attachment.data.data) {
-                // Create data URL for inline image
-                const mimeType = message.payload?.parts?.find(p => p.body?.attachmentId === img.id)?.mimeType || 'image/jpeg';
-                const dataUrl = `data:${mimeType};base64,${attachment.data.data}`;
-                attachmentMap.set(img.contentId, dataUrl);
-              }
-            } catch (error) {
-              logger.error(`Error fetching inline image ${img.id}:`, error);
+            
+            if (attachment.data.data) {
+              // Create data URL for inline image
+              const mimeType = message.payload?.parts?.find(p => p.body?.attachmentId === img.id)?.mimeType || 'image/jpeg';
+              const dataUrl = `data:${mimeType};base64,${attachment.data.data}`;
+              attachmentMap.set(img.contentId, dataUrl);
             }
+          } catch (error) {
+            logger.error(`Error fetching inline image ${img.id}:`, error);
           }
-          
-          // Process the HTML content with inline images
-          let processedBody = processInlineImages(rawBody, attachmentMap);
-          
-          // Process the email HTML (sanitize, clean, format)
-          const processedResult = processEmailHtml({
-            html: processedBody,
-            shouldLoadImages: true, // Allow images by default
-            theme: 'light',
-          });
-          
-          return {
-            id: message.id,
-            from,
-            subject,
-            date,
-            body: processedResult.processedHtml,
-            rawBody: rawBody, // Keep original for debugging
-            plainTextContent: processedResult.plainTextContent,
-            hasBlockedImages: processedResult.hasBlockedImages,
-            snippet: message.snippet,
-          };
+        }
+        
+        // Process the HTML content with inline images
+        let processedBody = processInlineImages(rawBody, attachmentMap);
+        
+        // Process the email HTML (sanitize, clean, format)
+        const processedResult = processEmailHtml({
+          html: processedBody,
+          shouldLoadImages: true, // Allow images by default
+          theme: 'light',
+        });
+        
+        return {
+          id: message.id,
+          from,
+          subject,
+          date,
+          body: processedResult.processedHtml,
+          rawBody: rawBody, // Keep original for debugging
+          plainTextContent: processedResult.plainTextContent,
+          hasBlockedImages: processedResult.hasBlockedImages,
+          snippet: message.snippet,
+        };
         } catch (error) {
           logger.error(`Error processing message ${message.id}:`, error);
           // Return basic message info even if processing fails

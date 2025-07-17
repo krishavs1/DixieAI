@@ -33,6 +33,7 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
   const [showPlainText, setShowPlainText] = useState(false);
   const [useWebView, setUseWebView] = useState(false);
   const [renderMethod, setRenderMethod] = useState<'auto' | 'webview' | 'native'>('auto');
+  const [contentHeight, setContentHeight] = useState(0);
 
   // Analyze email complexity to determine best rendering method
   const emailAnalysis = useMemo(() => {
@@ -57,124 +58,48 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
     if (renderMethod === 'webview') return true;
     if (renderMethod === 'native') return false;
     
-    // Auto mode: use WebView for any "real" HTML emails with tables or styles
-    return html.includes('<table') || html.includes('<style') || emailAnalysis.complexity >= 3 || emailAnalysis.imageCount > 2;
-  }, [html, emailAnalysis, renderMethod]);
+    // Auto mode: always use WebView by default for marketing emails
+    return true;
+  }, [renderMethod]);
 
-  // WebView CSS for email styling - cleaned up per ChatGPT suggestions
+  // WebView CSS for email styling - aggressive margin/padding removal
   const webViewCSS = `
     html, body {
       margin: 0;
       padding: 0;
-      background: ${isDarkMode ? '#202124' : '#fff'};
-      color: ${isDarkMode ? '#e8eaed' : '#202124'};
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      line-height: 1.4;
       overflow-x: hidden;
     }
 
     .email-container {
-      padding: 16px;
-      width: 100%;
-      box-sizing: border-box;
+      margin: 0 !important;
+      padding: 0 8px !important;
     }
 
-    /* Remove excessive top spacing from email content */
+    .email-content {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
     .email-content > * {
-      margin-top: 0 !important;
-      padding-top: 0 !important;
-    }
-
-    /* Target common email spacer elements */
-    .email-content > div:empty,
-    .email-content > table:empty,
-    .email-content > td:empty,
-    .email-content > tr:empty {
-      display: none !important;
-    }
-
-    /* Remove top margins from first elements */
-    .email-content > *:first-child {
-      margin-top: 0 !important;
-      padding-top: 0 !important;
-    }
-
-    /* Target spacer images */
-    img[src*="spacer"],
-    img[alt*="spacer"],
-    img[width="1"],
-    img[height="1"] {
-      display: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
     }
 
     img {
-      max-width: 100%;
-      height: auto;
-      display: block;
-      border-radius: 4px;
+      max-width: 100% !important;
+      height: auto !important;
+      display: block !important;
     }
 
     table {
       width: 100% !important;
       table-layout: auto !important;
-      border-collapse: collapse !important; 
+      border-collapse: collapse !important;
     }
 
     td, th {
       padding: 0 !important;
       border: none !important;
-    }
-
-    /* Only target specific email wrapper tables, not all tables */
-    table[role="presentation"] td,
-    table[role="presentation"] th {
-      border: none !important;
-      padding: 0 !important;
-    }
-
-    /* Target common email wrapper classes */
-    .background-base,
-    .background-base td,
-    .background-base th {
-      border: none !important;
-      padding: 0 !important;
-    }
-
-    [class*="w100pc"] td,
-    [class*="w100pc"] th {
-      border: none !important;
-      padding: 0 !important;
-    }
-
-    /* Gmail-specific wrapper classes */
-    [class*="m_-"] table {
-      border: none !important;
-    }
-
-    [class*="m_-"] td,
-    [class*="m_-"] th {
-      border: none !important;
-    }
-
-    /* Links */
-    a {
-      color: ${isDarkMode ? '#8ab4f8' : '#1a73e8'};
-      text-decoration: none;
-    }
-
-    /* Paragraphs */
-    p {
-      margin-bottom: 1em;
-    }
-
-    /* Blockquotes */
-    blockquote {
-      border-left: 4px solid ${isDarkMode ? '#5f6368' : '#dadce0'};
-      margin: 1em 0;
-      padding-left: 1em;
-      font-style: italic;
-      color: ${isDarkMode ? '#9aa0a6' : '#5f6368'};
     }
   `;
 
@@ -399,13 +324,12 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
       <!DOCTYPE html>
       <html>
         <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=yes">
-          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
           <style>${webViewCSS}</style>
         </head>
         <body>
           <div class="email-container">
-            <div class="email-content" style="background-color: ${isDarkMode ? '#202124' : '#ffffff'}; color: ${isDarkMode ? '#e8eaed' : '#202124'};">
+            <div class="email-content">
               ${html}
             </div>
           </div>
@@ -414,12 +338,12 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
     `;
 
     return (
-      <View style={[styles.container, style]}>
+      <View style={[styles.containerWebView, style]}>
         {renderControls()}
         <WebView
           originWhitelist={['*']}
           source={{ html: webViewHTML }}
-          style={styles.webView}
+          style={[styles.webView, { height: contentHeight || 200 }]}
           scrollEnabled={true}
           showsVerticalScrollIndicator={true}
           showsHorizontalScrollIndicator={false}
@@ -440,41 +364,32 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
             console.log('WebView loaded successfully');
           }}
           onMessage={(event) => {
-            console.log('WebView message:', event.nativeEvent.data);
+            const height = Number(event.nativeEvent.data);
+            if (!isNaN(height) && height > 0) {
+              console.log('Setting content height to:', height);
+              setContentHeight(height);
+            }
           }}
           injectedJavaScript={`
             console.log('WebView content loaded');
             
-            // Remove empty spacer elements that cause top whitespace
-            const emailContent = document.querySelector('.email-content');
-            if (emailContent) {
-              // Remove empty divs, tables, and spacer images at the top
-              const children = Array.from(emailContent.children);
-              for (let i = 0; i < children.length; i++) {
-                const child = children[i];
-                
-                // Remove empty elements
-                if (!child.textContent.trim() && !child.querySelector('img')) {
-                  child.style.display = 'none';
-                  continue;
-                }
-                
-                // Remove spacer images
-                const imgs = child.querySelectorAll('img');
-                imgs.forEach(img => {
-                  if (img.width <= 1 || img.height <= 1 || 
-                      img.src.includes('spacer') || 
-                      img.alt.includes('spacer')) {
-                    img.style.display = 'none';
-                  }
-                });
-                
-                // If we found content, break the loop
-                if (child.textContent.trim() || child.querySelector('img:not([style*="display: none"])')) {
-                  break;
-                }
-              }
-            }
+            // Measure the actual content height and send it to React Native
+            const measureHeight = () => {
+              const height = Math.max(
+                document.documentElement.scrollHeight,
+                document.body.scrollHeight,
+                document.documentElement.offsetHeight,
+                document.body.offsetHeight
+              );
+              window.ReactNativeWebView.postMessage(height.toString());
+            };
+            
+            // Measure immediately
+            measureHeight();
+            
+            // Also measure after images load
+            setTimeout(measureHeight, 100);
+            setTimeout(measureHeight, 500);
             
             true;
           `}
@@ -529,6 +444,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  containerWebView: {
+    flex: 0, // Don't stretch, let content determine size
+  },
   controls: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -573,11 +491,10 @@ const styles = StyleSheet.create({
     color: '#999',
   },
   webView: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    minHeight: 400,
     width: '100%',
-    maxWidth: '100%',
+    margin: 0,
+    padding: 0,
+    backgroundColor: 'transparent',
   },
   plainText: {
     padding: 16,
