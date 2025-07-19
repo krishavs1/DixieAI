@@ -259,6 +259,11 @@ export const emailService = {
     const subject = thread.subject.toLowerCase();
     const snippet = thread.snippet.toLowerCase();
     
+    // First, check if Gmail has already categorized this as promotional
+    if (thread.labels && thread.labels.includes('CATEGORY_PROMOTIONS')) {
+      return 'promotions';
+    }
+    
     // Social media and networking
     const socialKeywords = [
       'facebook', 'twitter', 'instagram', 'linkedin', 'tiktok', 'snapchat', 'youtube',
@@ -272,6 +277,11 @@ export const emailService = {
       'sale', 'discount', 'offer', 'deal', 'promotion', 'coupon', 'save', 'buy',
       'shop', 'store', 'retail', 'clearance', 'free shipping', 'buy now', 'shop now',
       'limited time', 'flash sale', 'exclusive', 'special offer', 'today only',
+      
+      // Unsubscribe and promotional indicators (strong signals)
+      'unsubscribe', 'opt out', 'email preferences', 'marketing preferences',
+      'email campaign', 'marketing email', 'promotional email', 'advertisement',
+      'sponsored', 'ad', 'commercial', 'newsletter', 'newsletter subscription',
       
       // Retail brands and stores
       'amazon', 'ebay', 'etsy', 'walmart', 'target', 'best buy', 'home depot',
@@ -324,7 +334,13 @@ export const emailService = {
       // Common promotional phrases
       'take off', 'almost gone', 'going fast', 'stock up', 'must-have',
       'favorite', 'trending', 'popular', 'bestseller', 'hot', 'new',
-      'just dropped', 'exclusive', 'limited edition', 'while supplies last'
+      'just dropped', 'exclusive', 'limited edition', 'while supplies last',
+      
+      // Additional promotional indicators
+      'bogo', 'buy one get one', 'free', 'bonus', 'reward', 'points',
+      'loyalty', 'member', 'vip', 'exclusive', 'premium', 'premium offer',
+      'flash', 'limited', 'expires', 'deadline', 'last chance', 'final',
+      'don\'t miss', 'act now', 'order now', 'call now', 'visit now'
     ];
     
     // Updates and notifications
@@ -350,7 +366,20 @@ export const emailService = {
       from.includes(keyword) || subject.includes(keyword) || snippet.includes(keyword)
     );
     
-    // Categorize based on priority - promotions first for better accuracy
+    // Strong promotional indicators that should override other categories
+    const strongPromotionalIndicators = [
+      'unsubscribe', 'opt out', 'email preferences', 'marketing preferences',
+      'email campaign', 'marketing email', 'promotional email', 'advertisement',
+      'sponsored', 'ad', 'commercial', 'newsletter', 'newsletter subscription',
+      'bogo', 'buy one get one', 'flash sale', 'limited time offer'
+    ];
+    
+    const hasStrongPromotionalIndicators = strongPromotionalIndicators.some(keyword =>
+      from.includes(keyword) || subject.includes(keyword) || snippet.includes(keyword)
+    );
+    
+    // Categorize based on priority - strong promotional indicators first
+    if (hasStrongPromotionalIndicators) return 'promotions';
     if (hasPromotionKeywords) return 'promotions';
     if (hasSocialKeywords) return 'social';
     if (hasUpdateKeywords) return 'updates';

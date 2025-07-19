@@ -51,10 +51,27 @@ const HomeScreen = () => {
     console.log('Applying filters and categorization to', threadsToProcess.length, 'threads');
     
     // Apply categorization
-    const categorizedThreads = threadsToProcess.map(thread => ({
-      ...thread,
-      category: emailService.categorizeEmail(thread)
-    }));
+    const categorizedThreads = threadsToProcess.map(thread => {
+      const category = emailService.categorizeEmail(thread);
+      
+      // Debug logging for specific emails
+      if (thread.from.toLowerCase().includes('veggie') || 
+          thread.from.toLowerCase().includes('lasell') ||
+          thread.subject.toLowerCase().includes('bogo') ||
+          thread.subject.toLowerCase().includes('future')) {
+        console.log(`Categorizing "${thread.subject}" from ${thread.from}:`, {
+          category,
+          labels: thread.labels,
+          hasUnsubscribe: thread.snippet.toLowerCase().includes('unsubscribe'),
+          hasBogo: thread.subject.toLowerCase().includes('bogo') || thread.snippet.toLowerCase().includes('bogo')
+        });
+      }
+      
+      return {
+        ...thread,
+        category
+      };
+    });
 
     // Filter by current category
     const categoryFiltered = categorizedThreads.filter(thread => 
@@ -69,17 +86,18 @@ const HomeScreen = () => {
       : categoryFiltered;
 
     // Apply search filter
-    const searchFiltered = searchQuery 
-      ? emailService.filterThreads(labelFiltered, { searchQuery })
+    const searchFiltered = searchQuery.trim() 
+      ? labelFiltered.filter(thread => 
+          thread.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          thread.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          thread.snippet.toLowerCase().includes(searchQuery.toLowerCase())
+        )
       : labelFiltered;
 
-    // Sort threads
+    // Sort by date (newest first)
     const sortedThreads = emailService.sortThreads(searchFiltered);
     
-    console.log(`Final threads: ${sortedThreads.length}, first few read statuses:`, 
-      sortedThreads.slice(0, 3).map(t => ({ id: t.id, read: t.read, subject: t.subject }))
-    );
-
+    console.log(`Filtered to ${sortedThreads.length} threads in category: ${currentCategory}`);
     setThreads(sortedThreads);
   };
 
