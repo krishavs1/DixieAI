@@ -33,7 +33,6 @@ const HomeScreen = () => {
   const [currentCategory, setCurrentCategory] = useState<EmailCategory>('primary');
   const [labels, setLabels] = useState<EmailLabel[]>(SYSTEM_LABELS);
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
-  const [showLabelMenu, setShowLabelMenu] = useState(false);
   const [currentFilter, setCurrentFilter] = useState<EmailFilter>({});
   const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
   const [showLabelModal, setShowLabelModal] = useState(false);
@@ -460,48 +459,15 @@ const HomeScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Label Filter */}
-        <View style={styles.labelFilterContainer}>
-          <TouchableOpacity 
-            style={styles.labelButton} 
-            onPress={() => setShowLabelMenu(!showLabelMenu)}
-          >
-            <Ionicons name="pricetag" size={16} color="#4285F4" />
-            <Text style={styles.labelText}>
-              Labels {selectedLabels.length > 0 && `(${selectedLabels.length})`}
-            </Text>
-            <Ionicons name={showLabelMenu ? "chevron-up" : "chevron-down"} size={16} color="#666" />
-          </TouchableOpacity>
-
-          {(selectedLabels.length > 0 || searchQuery) && (
+        {/* Clear Filters Button */}
+        {(selectedLabels.length > 0 || searchQuery) && (
+          <View style={styles.clearFiltersContainer}>
             <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
               <Ionicons name="close-circle" size={16} color="#EA4335" />
               <Text style={styles.clearText}>Clear</Text>
             </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Label Menu */}
-        {showLabelMenu && (
-          <View style={styles.dropdownMenu}>
-            {labels.map((label) => (
-              <TouchableOpacity
-                key={label.id}
-                style={[styles.dropdownItem, selectedLabels.includes(label.id) && styles.selectedDropdownItem]}
-                onPress={() => handleLabelToggle(label.id)}
-              >
-                <View style={styles.labelItem}>
-                  <View style={[styles.labelColor, { backgroundColor: label.color }]} />
-                  <Text style={[styles.dropdownText, selectedLabels.includes(label.id) && styles.selectedDropdownText]}>
-                    {label.name}
-                  </Text>
-                </View>
-                {selectedLabels.includes(label.id) && <Ionicons name="checkmark" size={16} color="#4285F4" />}
-              </TouchableOpacity>
-            ))}
           </View>
         )}
-
 
       </View>
 
@@ -541,10 +507,7 @@ const HomeScreen = () => {
 
       {/* Floating Action Button - Compose */}
       <TouchableOpacity style={styles.fab} onPress={() => {
-        showMessage({
-          message: 'Compose feature coming soon!',
-          type: 'info',
-        });
+        (navigation as any).navigate('Compose');
       }}>
         <Ionicons name="create" size={24} color="#fff" />
       </TouchableOpacity>
@@ -922,23 +885,6 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     fontWeight: '500',
   },
-  labelButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e1e5e9',
-    marginRight: 8,
-  },
-  labelText: {
-    marginHorizontal: 8,
-    fontSize: 14,
-    color: '#1f2937',
-    fontWeight: '500',
-  },
   clearButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -954,42 +900,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#dc2626',
     fontWeight: '500',
-  },
-  dropdownMenu: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    maxHeight: 200,
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f3f4',
-  },
-  selectedDropdownItem: {
-    backgroundColor: '#e8f0fe',
-  },
-  dropdownText: {
-    fontSize: 14,
-    color: '#3c4043',
-  },
-  selectedDropdownText: {
-    color: '#1a73e8',
-    fontWeight: '500',
-  },
-  labelItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   labelColor: {
     width: 12,
@@ -1114,58 +1024,7 @@ const styles = StyleSheet.create({
     color: '#1a73e8',
     fontWeight: '500',
   },
-  // Category tab styles
-  categoryTabs: {
-    flexDirection: 'row',
-    backgroundColor: '#f8f9fa',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-  },
-  categoryTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    marginHorizontal: 4,
-  },
-  activeCategoryTab: {
-    backgroundColor: '#4285F4',
-  },
-  categoryText: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginLeft: 4,
-    color: '#6b7280',
-  },
-  activeCategoryText: {
-    color: '#fff',
-  },
-  categoryBadge: {
-    marginLeft: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    minWidth: 20,
-    alignItems: 'center',
-  },
-  categoryBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  labelFilterContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-  },
+  // Header styles
   menuButton: {
     padding: 8,
   },
@@ -1288,6 +1147,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     zIndex: 1000,
+  },
+  clearFiltersContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 15,
   },
 });
 

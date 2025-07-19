@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import { authMiddleware } from '../middleware/auth';
 import { z } from 'zod';
 import { processEmailHtml, extractEmailBody, findInlineImages, processInlineImages } from '../utils/emailProcessor';
+import * as he from 'he';
 
 interface AuthRequest extends express.Request {
   user?: any;
@@ -59,6 +60,26 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     // Use batch requests to get thread metadata more efficiently
     const threadsWithPreview = await Promise.allSettled(
       threads.map(async (thread) => { // Process all 50 threads
+        // Extract display name from "Display Name <email@domain.com>" format
+        const extractDisplayName = (fromField: string): string => {
+          if (!fromField) return '';
+          
+          // If it's in "Display Name <email@domain.com>" format, extract the display name
+          const match = fromField.match(/^"?(.*?)"?\s*<.*>$/);
+          if (match && match[1]) {
+            return match[1].trim();
+          }
+          
+          // If it's just an email address without display name, return the email
+          const emailMatch = fromField.match(/^([^<]+)$/);
+          if (emailMatch) {
+            return emailMatch[1].trim();
+          }
+          
+          // Fallback to the original field
+          return fromField;
+        };
+
         try {
           const threadData = await withTimeout(
             gmail.users.threads.get({
@@ -87,8 +108,8 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
 
           return {
             id: thread.id,
-            snippet: thread.snippet,
-            from,
+            snippet: he.decode(thread.snippet || ''),
+            from: extractDisplayName(from),
             subject,
             date,
             messageCount: messages.length,
@@ -100,8 +121,8 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
           // Return basic info even if metadata fetch fails
           return {
             id: thread.id,
-            snippet: thread.snippet,
-            from: '',
+            snippet: he.decode(thread.snippet || ''),
+            from: extractDisplayName(''),
             subject: '',
             date: '',
             messageCount: 0,
@@ -149,11 +170,33 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
     // Process messages to extract and process content
     const processedMessages = await Promise.allSettled(
       messages.map(async (message) => {
+        // Extract display name from "Display Name <email@domain.com>" format
+        const extractDisplayName = (fromField: string): string => {
+          if (!fromField) return '';
+          
+          // If it's in "Display Name <email@domain.com>" format, extract the display name
+          const match = fromField.match(/^"?(.*?)"?\s*<.*>$/);
+          if (match && match[1]) {
+            return match[1].trim();
+          }
+          
+          // If it's just an email address without display name, return the email
+          const emailMatch = fromField.match(/^([^<]+)$/);
+          if (emailMatch) {
+            return emailMatch[1].trim();
+          }
+          
+          // Fallback to the original field
+          return fromField;
+        };
+
         try {
         const headers = message.payload?.headers || [];
         const from = headers.find(h => h.name === 'From')?.value || '';
         const subject = headers.find(h => h.name === 'Subject')?.value || '';
         const date = headers.find(h => h.name === 'Date')?.value || '';
+        
+        const displayName = extractDisplayName(from);
         
         // Extract raw HTML body using our email processor
         let rawBody = extractEmailBody(message.payload);
@@ -206,14 +249,14 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
         
         return {
           id: message.id,
-          from,
+          from: displayName,
           subject,
           date,
           body: processedResult.processedHtml,
           rawBody: rawBody, // Keep original for debugging
           plainTextContent: processedResult.plainTextContent,
           hasBlockedImages: processedResult.hasBlockedImages,
-          snippet: message.snippet,
+          snippet: he.decode(message.snippet || ''),
         };
         } catch (error) {
           logger.error(`Error processing message ${message.id}:`, error);
@@ -221,14 +264,14 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
           const headers = message.payload?.headers || [];
           return {
             id: message.id,
-            from: headers.find(h => h.name === 'From')?.value || '',
+            from: extractDisplayName(headers.find(h => h.name === 'From')?.value || ''),
             subject: headers.find(h => h.name === 'Subject')?.value || '',
             date: headers.find(h => h.name === 'Date')?.value || '',
-            body: message.snippet || 'Message content could not be loaded',
+            body: he.decode(message.snippet || 'Message content could not be loaded'),
             rawBody: '',
             plainTextContent: message.snippet || '',
             hasBlockedImages: false,
-            snippet: message.snippet,
+            snippet: he.decode(message.snippet || ''),
           };
         }
       })

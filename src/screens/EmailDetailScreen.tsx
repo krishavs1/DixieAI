@@ -282,6 +282,22 @@ const EmailDetailScreen = () => {
         >
           <Ionicons name="arrow-undo" size={24} color={isDarkMode ? '#8ab4f8' : '#1a73e8'} />
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            const latestMessage = emailThread?.messages[emailThread.messages.length - 1];
+            if (latestMessage) {
+              (navigation as any).navigate('Compose', {
+                forwardData: {
+                  subject: `Fwd: ${latestMessage.subject}`,
+                  body: `\n\n---------- Forwarded message ----------\nFrom: ${latestMessage.from}\nDate: ${formatDate(latestMessage.date)}\nSubject: ${latestMessage.subject}\n\n${latestMessage.body || latestMessage.snippet}`
+                }
+              });
+            }
+          }}
+          style={styles.replyHeaderButton}
+        >
+          <Ionicons name="arrow-redo" size={24} color={isDarkMode ? '#8ab4f8' : '#1a73e8'} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
