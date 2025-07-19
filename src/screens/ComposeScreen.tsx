@@ -10,6 +10,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
@@ -21,6 +22,7 @@ const ComposeScreen = ({ route }: any) => {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   
   const { token } = useContext(AuthContext)!;
   const navigation = useNavigation();
@@ -87,18 +89,34 @@ const ComposeScreen = ({ route }: any) => {
     }
   };
 
+  const handleAttachment = (type: string) => {
+    setShowAttachmentMenu(false);
+    // TODO: Implement attachment functionality
+    Alert.alert('Coming Soon', `${type} attachment functionality will be implemented soon!`);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
+        {/* Header with Action Buttons */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleCancel} style={styles.headerButton}>
-            <Ionicons name="close" size={24} color="#666" />
-          </TouchableOpacity>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity onPress={handleCancel} style={styles.headerButton}>
+              <Ionicons name="close" size={24} color="#666" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setShowAttachmentMenu(true)} 
+              style={styles.headerButton}
+            >
+              <Ionicons name="attach" size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+          
           <Text style={styles.headerTitle}>New Message</Text>
+          
           <TouchableOpacity 
             onPress={handleSend} 
             style={[styles.sendButton, isSending && styles.sendButtonDisabled]}
@@ -156,21 +174,45 @@ const ComposeScreen = ({ route }: any) => {
           </View>
         </ScrollView>
 
-        {/* Bottom Actions */}
-        <View style={styles.bottomActions}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="attach" size={20} color="#666" />
+        {/* Attachment Menu Modal */}
+        <Modal
+          visible={showAttachmentMenu}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowAttachmentMenu(false)}
+        >
+          <TouchableOpacity 
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowAttachmentMenu(false)}
+          >
+            <View style={styles.attachmentMenu}>
+              <TouchableOpacity 
+                style={styles.attachmentOption}
+                onPress={() => handleAttachment('Photo')}
+              >
+                <Ionicons name="image" size={20} color="#666" />
+                <Text style={styles.attachmentText}>Photo</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.attachmentOption}
+                onPress={() => handleAttachment('Camera')}
+              >
+                <Ionicons name="camera" size={20} color="#666" />
+                <Text style={styles.attachmentText}>Camera</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.attachmentOption}
+                onPress={() => handleAttachment('File')}
+              >
+                <Ionicons name="document" size={20} color="#666" />
+                <Text style={styles.attachmentText}>File</Text>
+              </TouchableOpacity>
+            </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="image" size={20} color="#666" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="camera" size={20} color="#666" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="document" size={20} color="#666" />
-          </TouchableOpacity>
-        </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -194,16 +236,26 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
     backgroundColor: '#fff',
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
   headerButton: {
     padding: 8,
+    marginRight: 8,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
+    flex: 2,
+    textAlign: 'center',
   },
   sendButton: {
     padding: 8,
+    flex: 1,
+    alignItems: 'flex-end',
   },
   sendButtonDisabled: {
     opacity: 0.5,
@@ -242,17 +294,31 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     minHeight: 200,
   },
-  bottomActions: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    backgroundColor: '#fff',
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  actionButton: {
-    padding: 12,
-    marginRight: 8,
+  attachmentMenu: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 10,
+    width: '80%',
+    alignItems: 'center',
+  },
+  attachmentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 6,
+    marginVertical: 5,
+  },
+  attachmentText: {
+    marginLeft: 10,
+    fontSize: 16,
+    color: '#333',
   },
 });
 

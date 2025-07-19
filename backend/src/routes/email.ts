@@ -145,6 +145,40 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
   }
 });
 
+// Get labels
+router.get('/labels', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+  try {
+    const { accessToken } = req.user;
+    
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    
+    const response = await withTimeout(
+      gmail.users.labels.list({
+        userId: 'me',
+      }),
+      10000 // 10 second timeout for labels
+    );
+
+    const labels = response.data.labels || [];
+    
+    // Transform labels to match our interface
+    const transformedLabels = labels.map(label => ({
+      id: label.id!,
+      name: label.name!,
+      color: label.color?.backgroundColor || '#4285F4',
+      count: label.messagesTotal || 0,
+    }));
+
+    return res.json({ labels: transformedLabels });
+  } catch (error) {
+    logger.error('Error fetching labels:', error);
+    return res.status(500).json({ error: 'Failed to fetch labels' });
+  }
+});
+
 // Get specific thread
 router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: express.Response) => {
   try {

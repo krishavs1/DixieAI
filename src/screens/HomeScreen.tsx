@@ -52,20 +52,6 @@ const HomeScreen = () => {
     // Apply categorization
     const categorizedThreads = threadsToProcess.map(thread => {
       const category = emailService.categorizeEmail(thread);
-      
-      // Debug logging for specific emails
-      if (thread.from.toLowerCase().includes('veggie') || 
-          thread.from.toLowerCase().includes('lasell') ||
-          thread.subject.toLowerCase().includes('bogo') ||
-          thread.subject.toLowerCase().includes('future')) {
-        console.log(`Categorizing "${thread.subject}" from ${thread.from}:`, {
-          category,
-          labels: thread.labels,
-          hasUnsubscribe: thread.snippet.toLowerCase().includes('unsubscribe'),
-          hasBogo: thread.subject.toLowerCase().includes('bogo') || thread.snippet.toLowerCase().includes('bogo')
-        });
-      }
-      
       return {
         ...thread,
         category
@@ -301,7 +287,7 @@ const HomeScreen = () => {
 
   // Get category information
   const getCategoryInfo = (): EmailCategoryInfo[] => {
-    const categories: EmailCategory[] = ['primary', 'social', 'promotions', 'updates'];
+    const categories: EmailCategory[] = ['primary', 'social', 'promotions', 'updates', 'sent'];
     return categories.map(category => {
       const count = originalThreads.filter(thread => 
         emailService.categorizeEmail(thread) === category
@@ -311,7 +297,8 @@ const HomeScreen = () => {
         primary: { name: 'Primary', color: '#4285F4', icon: 'mail' },
         social: { name: 'Social', color: '#34A853', icon: 'people' },
         promotions: { name: 'Promotions', color: '#FBBC04', icon: 'pricetag' },
-        updates: { name: 'Updates', color: '#EA4335', icon: 'notifications' }
+        updates: { name: 'Updates', color: '#EA4335', icon: 'notifications' },
+        sent: { name: 'Sent', color: '#34A853', icon: 'send' }
       };
       
       return {

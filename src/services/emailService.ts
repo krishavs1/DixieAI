@@ -52,7 +52,7 @@ export interface DetailedEmailThread {
   labels?: string[]; // Array of label IDs
 }
 
-export type EmailCategory = 'primary' | 'social' | 'promotions' | 'updates';
+export type EmailCategory = 'primary' | 'social' | 'promotions' | 'updates' | 'sent';
 
 export interface EmailCategoryInfo {
   id: EmailCategory;
@@ -255,136 +255,29 @@ export const emailService = {
 
   // Email categorization function
   categorizeEmail(thread: EmailThread): EmailCategory {
-    const from = thread.from.toLowerCase();
-    const subject = thread.subject.toLowerCase();
-    const snippet = thread.snippet.toLowerCase();
-    
-    // First, check if Gmail has already categorized this as promotional
-    if (thread.labels && thread.labels.includes('CATEGORY_PROMOTIONS')) {
-      return 'promotions';
+    // Use Gmail's category labels directly - they're already accurate!
+    if (thread.labels) {
+      // Sent emails should not appear in any category - they go to Sent tab
+      // UNLESS they also have INBOX label (self-sent emails), then they go to Primary
+      if (thread.labels.includes('SENT') && !thread.labels.includes('INBOX')) {
+        return 'sent'; // Only pure sent emails (not self-sent)
+      }
+      
+      if (thread.labels.includes('CATEGORY_SOCIAL')) {
+        return 'social';
+      }
+      if (thread.labels.includes('CATEGORY_PROMOTIONS')) {
+        return 'promotions';
+      }
+      if (thread.labels.includes('CATEGORY_UPDATES')) {
+        return 'updates';
+      }
+      if (thread.labels.includes('CATEGORY_PERSONAL')) {
+        return 'primary';
+      }
     }
     
-    // Social media and networking
-    const socialKeywords = [
-      'facebook', 'twitter', 'instagram', 'linkedin', 'tiktok', 'snapchat', 'youtube',
-      'discord', 'slack', 'whatsapp', 'telegram', 'reddit', 'pinterest', 'tumblr',
-      'friend', 'connection', 'follow', 'like', 'share', 'comment', 'post'
-    ];
-    
-    // Promotional emails - MUCH more comprehensive
-    const promotionKeywords = [
-      // Common promotional words
-      'sale', 'discount', 'offer', 'deal', 'promotion', 'coupon', 'save', 'buy',
-      'shop', 'store', 'retail', 'clearance', 'free shipping', 'buy now', 'shop now',
-      'limited time', 'flash sale', 'exclusive', 'special offer', 'today only',
-      
-      // Unsubscribe and promotional indicators (strong signals)
-      'unsubscribe', 'opt out', 'email preferences', 'marketing preferences',
-      'email campaign', 'marketing email', 'promotional email', 'advertisement',
-      'sponsored', 'ad', 'commercial', 'newsletter', 'newsletter subscription',
-      
-      // Retail brands and stores
-      'amazon', 'ebay', 'etsy', 'walmart', 'target', 'best buy', 'home depot',
-      'lowes', 'macy', 'nordstrom', 'gap', 'old navy', 'banana republic',
-      'h&m', 'zara', 'uniqlo', 'forever 21', 'asos', 'shein', 'fashion nova',
-      
-      // Sports and fashion brands
-      'nike', 'adidas', 'puma', 'reebok', 'under armour', 'converse', 'vans',
-      'pacsun', 'urban outfitters', 'american eagle', 'aeropostale', 'hollister',
-      
-      // Department stores and malls
-      'kohl', 'jcpenney', 'sears', 'belk', 'dillards', 'neiman marcus',
-      'saks', 'bloomingdale', 'barneys', 'bergdorf', 'lord & taylor',
-      
-      // Food and restaurants
-      'mcdonalds', 'burger king', 'wendys', 'subway', 'dominos', 'pizza hut',
-      'chipotle', 'panera', 'starbucks', 'dunkin', 'kfc', 'taco bell',
-      
-      // Entertainment and media
-      'netflix', 'hulu', 'disney', 'hbo', 'paramount', 'peacock', 'apple tv',
-      'spotify', 'pandora', 'youtube music', 'tidal', 'amazon music',
-      
-      // Technology and electronics
-      'apple', 'samsung', 'google', 'microsoft', 'dell', 'hp', 'lenovo',
-      'sony', 'lg', 'panasonic', 'sharp', 'philips', 'bose', 'jbl',
-      
-      // Automotive
-      'ford', 'chevrolet', 'toyota', 'honda', 'nissan', 'bmw', 'mercedes',
-      'audi', 'volkswagen', 'hyundai', 'kia', 'mazda', 'subaru',
-      
-      // Travel and hospitality
-      'marriott', 'hilton', 'hyatt', 'ihg', 'choice', 'wyndham', 'airbnb',
-      'expedia', 'booking', 'hotels', 'priceline', 'orbitz', 'kayak',
-      
-      // Financial services
-      'chase', 'bank of america', 'wells fargo', 'citibank', 'capital one',
-      'american express', 'discover', 'mastercard', 'visa', 'paypal',
-      
-      // Health and beauty
-      'walgreens', 'cvs', 'rite aid', 'ulta', 'sephora', 'mac', 'loreal',
-      'maybelline', 'revlon', 'covergirl', 'neutrogena', 'cerave',
-      
-      // Marketing and newsletter indicators
-      'newsletter', 'marketing', 'advertisement', 'sponsored', 'promotional',
-      'email campaign', 'special', 'announcement', 'news', 'updates',
-      
-      // Emojis and symbols commonly used in promotions
-      '🔥', '⚡', '🎉', '🎊', '💥', '⭐', '🏆', '🎯', '💰', '💎',
-      
-      // Common promotional phrases
-      'take off', 'almost gone', 'going fast', 'stock up', 'must-have',
-      'favorite', 'trending', 'popular', 'bestseller', 'hot', 'new',
-      'just dropped', 'exclusive', 'limited edition', 'while supplies last',
-      
-      // Additional promotional indicators
-      'bogo', 'buy one get one', 'free', 'bonus', 'reward', 'points',
-      'loyalty', 'member', 'vip', 'exclusive', 'premium', 'premium offer',
-      'flash', 'limited', 'expires', 'deadline', 'last chance', 'final',
-      'don\'t miss', 'act now', 'order now', 'call now', 'visit now'
-    ];
-    
-    // Updates and notifications
-    const updateKeywords = [
-      'update', 'notification', 'alert', 'reminder', 'confirm', 'verify',
-      'password', 'security', 'login', 'account', 'billing', 'payment',
-      'receipt', 'invoice', 'statement', 'report', 'status', 'tracking',
-      'delivery', 'shipping', 'order', 'confirmation'
-    ];
-    
-    // Check for social keywords
-    const hasSocialKeywords = socialKeywords.some(keyword => 
-      from.includes(keyword) || subject.includes(keyword) || snippet.includes(keyword)
-    );
-    
-    // Check for promotion keywords - more aggressive matching
-    const hasPromotionKeywords = promotionKeywords.some(keyword => 
-      from.includes(keyword) || subject.includes(keyword) || snippet.includes(keyword)
-    );
-    
-    // Check for update keywords
-    const hasUpdateKeywords = updateKeywords.some(keyword => 
-      from.includes(keyword) || subject.includes(keyword) || snippet.includes(keyword)
-    );
-    
-    // Strong promotional indicators that should override other categories
-    const strongPromotionalIndicators = [
-      'unsubscribe', 'opt out', 'email preferences', 'marketing preferences',
-      'email campaign', 'marketing email', 'promotional email', 'advertisement',
-      'sponsored', 'ad', 'commercial', 'newsletter', 'newsletter subscription',
-      'bogo', 'buy one get one', 'flash sale', 'limited time offer'
-    ];
-    
-    const hasStrongPromotionalIndicators = strongPromotionalIndicators.some(keyword =>
-      from.includes(keyword) || subject.includes(keyword) || snippet.includes(keyword)
-    );
-    
-    // Categorize based on priority - strong promotional indicators first
-    if (hasStrongPromotionalIndicators) return 'promotions';
-    if (hasPromotionKeywords) return 'promotions';
-    if (hasSocialKeywords) return 'social';
-    if (hasUpdateKeywords) return 'updates';
-    
-    // Default to primary (personal emails)
+    // If Gmail hasn't categorized it, default to primary
     return 'primary';
   },
 
