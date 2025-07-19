@@ -18,7 +18,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import { emailService, DetailedEmailThread, EmailMessage } from '../services/emailService';
-import { API_CONFIG } from '../config/api';
 import EmailRenderer from '../components/EmailRenderer';
 
 const EmailDetailScreen = () => {
@@ -41,8 +40,7 @@ const EmailDetailScreen = () => {
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [showImagesMap, setShowImagesMap] = useState<{[key: string]: boolean}>({});
-  const [processedContentMap, setProcessedContentMap] = useState<{[key: string]: string}>({});
+
   const [expandedMessages, setExpandedMessages] = useState<{[key: string]: boolean}>({});
   
   const isDarkMode = colorScheme === 'dark';
@@ -69,54 +67,7 @@ const EmailDetailScreen = () => {
     }
   };
 
-  const processEmailContent = async (messageId: string, rawBody: string, shouldLoadImages: boolean) => {
-    try {
-      // Get the dynamic base URL
-      const baseURL = typeof API_CONFIG.BASE_URL === 'string' 
-        ? API_CONFIG.BASE_URL 
-        : await API_CONFIG.BASE_URL;
-        
-      const response = await fetch(`${baseURL}/api/email/process`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          html: rawBody,
-          shouldLoadImages,
-          theme: isDarkMode ? 'dark' : 'light',
-        }),
-      });
 
-      if (!response.ok) {
-        throw new Error('Failed to process email content');
-      }
-
-      const result = await response.json();
-      return result.processedHtml;
-    } catch (error) {
-      console.error('Error processing email content:', error);
-      return rawBody; // Fallback to raw content
-    }
-  };
-
-  const toggleImages = async (messageId: string, rawBody: string) => {
-    const currentShowImages = showImagesMap[messageId] || false;
-    const newShowImages = !currentShowImages;
-    
-    setShowImagesMap(prev => ({
-      ...prev,
-      [messageId]: newShowImages
-    }));
-
-    // Process content with new image setting
-    const processedContent = await processEmailContent(messageId, rawBody, newShowImages);
-    setProcessedContentMap(prev => ({
-      ...prev,
-      [messageId]: processedContent
-    }));
-  };
 
   const toggleMessageExpansion = (messageId: string) => {
     setExpandedMessages(prev => ({
@@ -177,17 +128,11 @@ const EmailDetailScreen = () => {
   };
 
   const getInitials = (name: string) => {
-    // Clean the name and remove any special characters
-    const cleanName = name.replace(/[<>]/g, '').trim();
-    if (!cleanName) return '?';
-    
-    const names = cleanName.split(' ').filter(n => n.length > 0);
+    const names = name.trim().split(' ');
     if (names.length >= 2) {
-      const first = names[0][0];
-      const last = names[names.length - 1][0];
-      return (first + last).toUpperCase();
+      return (names[0][0] + names[names.length - 1][0]).toUpperCase();
     }
-    return cleanName.slice(0, 2).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
   };
 
   const renderMessageHeader = (message: EmailMessage, index: number, isExpanded: boolean) => {
@@ -236,44 +181,7 @@ const EmailDetailScreen = () => {
     );
   };
 
-  const renderMessage = (message: EmailMessage, index: number) => {
-    const isExpanded = expandedMessages[message.id] || false;
-    const processedContent = processedContentMap[message.id];
-    
-    // Use processed content if available, otherwise fall back to the backend-processed body
-    const content = processedContent || message.body || message.snippet;
-    
-    console.log(`Message ${index} content length:`, content?.length);
-    console.log(`Message ${index} is HTML:`, isHtmlContent(content));
-    console.log(`Message ${index} content preview:`, content?.substring(0, 100));
-    
-    return (
-      <View key={message.id} style={[styles.messageContainer, isDarkMode && styles.messageContainerDark]}>
-        {renderMessageHeader(message, index, isExpanded)}
-        
-        {isExpanded && (
-          <View style={styles.messageContent}>
-            <View style={styles.messageBody}>
-              {isHtmlContent(content) ? (
-                <EmailRenderer
-                  html={content}
-                  plainText={message.plainTextContent}
-                  onLinkPress={(url) => {
-                    // Handle link press
-                    console.log('Link pressed:', url);
-                  }}
-                />
-              ) : (
-                <Text style={[styles.bodyText, isDarkMode && styles.bodyTextDark]}>
-                  {content}
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
-      </View>
-    );
-  };
+
 
   const renderReplyBox = () => {
     if (!showReplyBox) return null;
@@ -361,7 +269,11 @@ const EmailDetailScreen = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={isDarkMode ? '#e8eaed' : '#3c4043'} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, isDarkMode && styles.headerTitleDark]} numberOfLines={1}>
+        <Text 
+          style={[styles.headerTitle, isDarkMode && styles.headerTitleDark]} 
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
           {thread.subject}
         </Text>
         <TouchableOpacity
@@ -372,12 +284,53 @@ const EmailDetailScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={[styles.content, isDarkMode && styles.contentDark]}
-        contentContainerStyle={{ paddingBottom: 16 }}
-        showsVerticalScrollIndicator={true}
+        contentContainerStyle={{ flexGrow: 1 }}
+        nestedScrollEnabled={true}
       >
-        {emailThread?.messages.map((message, index) => renderMessage(message, index))}
+        {emailThread?.messages.map((message, index) => {
+          const isExpanded = expandedMessages[message.id] || false;
+          return (
+            <View
+              key={message.id}
+              style={[
+                styles.messageContainer,
+                isDarkMode && styles.messageContainerDark,
+              ]}
+            >
+              {renderMessageHeader(message, index, isExpanded)}
+
+              {isExpanded && (
+                <View
+                  style={[
+                    styles.messageContent,
+                    { flex: 1 }
+                  ]}
+                >
+                  <View style={styles.messageBody}>
+                    {isHtmlContent(message.body || message.snippet) ? (
+                      <View style={{ marginHorizontal: -16 }}>
+                        <EmailRenderer
+                          html={message.body || message.snippet}
+                          plainText={message.plainTextContent}
+                          onLinkPress={(url) => {
+                            console.log('Link pressed:', url);
+                          }}
+                          style={{ flex: 1, minHeight: 80 }}
+                        />
+                      </View>
+                    ) : (
+                      <Text style={[styles.bodyText, isDarkMode && styles.bodyTextDark]}>
+                        {message.body || message.snippet}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              )}
+            </View>
+          );
+        })}
       </ScrollView>
 
       {renderReplyBox()}
@@ -414,6 +367,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#1F2937',
+    marginRight: 8,
   },
   headerTitleDark: {
     color: '#E8EAED',
@@ -558,13 +512,14 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
     padding: 16,
-    paddingBottom: 8, // Reduce bottom padding
     borderTopWidth: 1,
     borderTopColor: '#f1f3f4',
+    flex: 1,
+    minHeight: 100,
   },
-
   messageBody: {
-    backgroundColor: 'transparent',
+    flex: 1,
+    minHeight: 80,
   },
   bodyText: {
     fontSize: 14,
