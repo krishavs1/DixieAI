@@ -58,7 +58,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     
     // Use batch requests to get thread metadata more efficiently
     const threadsWithPreview = await Promise.allSettled(
-      threads.slice(0, 20).map(async (thread) => { // Still limit detailed processing to first 20 for performance
+      threads.map(async (thread) => { // Process all 50 threads
         try {
           const threadData = await withTimeout(
             gmail.users.threads.get({
@@ -67,7 +67,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
             format: 'metadata',
             metadataHeaders: ['From', 'Subject', 'Date'],
             }),
-            10000 // 10 second timeout for each thread metadata request
+            15000 // 15 second timeout for each thread metadata request (increased for 50 threads)
           );
 
           const messages = threadData.data.messages || [];

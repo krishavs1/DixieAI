@@ -41,7 +41,6 @@ const EmailDetailScreen = () => {
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [showPlainTextMap, setShowPlainTextMap] = useState<{[key: string]: boolean}>({});
   const [showImagesMap, setShowImagesMap] = useState<{[key: string]: boolean}>({});
   const [processedContentMap, setProcessedContentMap] = useState<{[key: string]: string}>({});
   const [expandedMessages, setExpandedMessages] = useState<{[key: string]: boolean}>({});
@@ -178,11 +177,17 @@ const EmailDetailScreen = () => {
   };
 
   const getInitials = (name: string) => {
-    const names = name.trim().split(' ');
+    // Clean the name and remove any special characters
+    const cleanName = name.replace(/[<>]/g, '').trim();
+    if (!cleanName) return '?';
+    
+    const names = cleanName.split(' ').filter(n => n.length > 0);
     if (names.length >= 2) {
-      return (names[0][0] + names[names.length - 1][0]).toUpperCase();
+      const first = names[0][0];
+      const last = names[names.length - 1][0];
+      return (first + last).toUpperCase();
     }
-    return name.slice(0, 2).toUpperCase();
+    return cleanName.slice(0, 2).toUpperCase();
   };
 
   const renderMessageHeader = (message: EmailMessage, index: number, isExpanded: boolean) => {
@@ -233,7 +238,6 @@ const EmailDetailScreen = () => {
 
   const renderMessage = (message: EmailMessage, index: number) => {
     const isExpanded = expandedMessages[message.id] || false;
-    const showPlainText = showPlainTextMap[message.id] || false;
     const processedContent = processedContentMap[message.id];
     
     // Use processed content if available, otherwise fall back to the backend-processed body
@@ -245,14 +249,8 @@ const EmailDetailScreen = () => {
         
         {isExpanded && (
           <View style={styles.messageContent}>
-            <View style={styles.messageSubject}>
-              <Text style={[styles.subjectText, isDarkMode && styles.subjectTextDark]}>
-                {message.subject}
-              </Text>
-            </View>
-            
             <View style={styles.messageBody}>
-              {isHtmlContent(content) && !showPlainText ? (
+              {isHtmlContent(content) ? (
                 <View style={{ minHeight: 100 }}>
                   <EmailRenderer
                     html={content}
@@ -265,7 +263,7 @@ const EmailDetailScreen = () => {
                 </View>
               ) : (
                 <Text style={[styles.bodyText, isDarkMode && styles.bodyTextDark]}>
-                  {showPlainText ? (message.plainTextContent || stripHtmlTags(content)) : content}
+                  {content}
                 </Text>
               )}
             </View>
@@ -557,20 +555,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#f1f3f4',
   },
-  messageSubject: {
-    marginBottom: 16,
-  },
-  subjectText: {
-    fontSize: 16,
-    fontWeight: '400',
-    color: '#3c4043',
-    lineHeight: 22,
-  },
-  subjectTextDark: {
-    color: '#e8eaed',
-  },
+
   messageBody: {
     minHeight: 50,
+    backgroundColor: 'transparent',
   },
   bodyText: {
     fontSize: 14,
