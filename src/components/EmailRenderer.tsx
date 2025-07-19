@@ -84,16 +84,17 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
           }
 
           .wrapper {
-            margin: 12px;
-            padding: 16px;
+            margin: 0;
+            padding: 12px;
             background: ${isDarkMode ? '#202124' : '#fff'};
             border-radius: 8px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.1);
             text-align: center;
             display: block;
-            width: calc(100% - 24px);
-            max-width: calc(100% - 24px);
+            width: 100%;
+            max-width: 100%;
             overflow-x: hidden;
+            box-sizing: border-box;
           }
 
           /* AGGRESSIVE responsive fixes to fit screen and center content */
@@ -168,7 +169,7 @@ const EmailRenderer: React.FC<EmailRendererProps> = ({
   `;
 
   return (
-    <View style={[{ width: screenWidth, height }, style]}>
+    <View style={[{ width: '100%', height }, style]}>
       {/* Debug Button */}
       <TouchableOpacity
         style={{
