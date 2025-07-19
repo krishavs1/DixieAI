@@ -48,27 +48,39 @@ const HomeScreen = () => {
 
   // Apply filters and categorization to threads
   const applyFiltersAndCategorization = (threadsToProcess: EmailThread[]) => {
-    let processedThreads = [...threadsToProcess];
+    console.log('Applying filters and categorization to', threadsToProcess.length, 'threads');
     
-    // Apply search filter
-    if (searchQuery) {
-      processedThreads = emailService.filterThreads(processedThreads, { searchQuery });
-    }
-    
-    // Apply label filters
-    if (selectedLabels.length > 0) {
-      processedThreads = emailService.filterThreads(processedThreads, { labels: selectedLabels });
-    }
-    
-    // Apply category filter
-    processedThreads = processedThreads.filter(thread => 
-      emailService.categorizeEmail(thread) === currentCategory
+    // Apply categorization
+    const categorizedThreads = threadsToProcess.map(thread => ({
+      ...thread,
+      category: emailService.categorizeEmail(thread)
+    }));
+
+    // Filter by current category
+    const categoryFiltered = categorizedThreads.filter(thread => 
+      thread.category === currentCategory
     );
+
+    // Apply label filters
+    const labelFiltered = selectedLabels.length > 0 
+      ? categoryFiltered.filter(thread => 
+          thread.labels && selectedLabels.some(labelId => thread.labels!.includes(labelId))
+        )
+      : categoryFiltered;
+
+    // Apply search filter
+    const searchFiltered = searchQuery 
+      ? emailService.filterThreads(labelFiltered, { searchQuery })
+      : labelFiltered;
+
+    // Sort threads
+    const sortedThreads = emailService.sortThreads(searchFiltered);
     
-    // Sort by date (newest first)
-    processedThreads = emailService.sortThreads(processedThreads);
-    
-    setThreads(processedThreads);
+    console.log(`Final threads: ${sortedThreads.length}, first few read statuses:`, 
+      sortedThreads.slice(0, 3).map(t => ({ id: t.id, read: t.read, subject: t.subject }))
+    );
+
+    setThreads(sortedThreads);
   };
 
   // Fetch threads on component mount and when token changes
@@ -83,7 +95,7 @@ const HomeScreen = () => {
     if (originalThreads.length > 0) {
       applyFiltersAndCategorization(originalThreads);
     }
-  }, [currentCategory, selectedLabels, searchQuery]);
+  }, [originalThreads, currentCategory, selectedLabels, searchQuery]);
 
   const fetchThreads = async () => {
     if (!token) return;
@@ -158,15 +170,22 @@ const HomeScreen = () => {
   };
 
   const handleThreadPress = async (thread: EmailThread) => {
+    console.log(`Opening thread ${thread.id}: read=${thread.read}, subject="${thread.subject}"`);
+    
     // Mark as read if it's currently unread
     if (thread.read === false && token) {
       try {
         await emailService.markAsRead(token, thread.id);
+        console.log(`Successfully marked thread ${thread.id} as read`);
         
         // Update local state immediately for better UX
-        setOriginalThreads(prev => prev.map(t => 
-          t.id === thread.id ? { ...t, read: true } : t
-        ));
+        setOriginalThreads(prev => {
+          const updated = prev.map(t => 
+            t.id === thread.id ? { ...t, read: true } : t
+          );
+          console.log(`Updated thread ${thread.id} in local state: read=${updated.find(t => t.id === thread.id)?.read}`);
+          return updated;
+        });
       } catch (error) {
         console.error('Error marking thread as read:', error);
         // Continue to navigate even if marking as read fails
