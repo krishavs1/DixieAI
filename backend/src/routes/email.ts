@@ -78,6 +78,13 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
           const subject = headers.find(h => h.name === 'Subject')?.value || '';
           const date = headers.find(h => h.name === 'Date')?.value || '';
 
+          // Get labels for the latest message to determine read status
+          const labelIds = latestMessage?.labelIds || [];
+          const isUnread = labelIds.includes('UNREAD');
+          
+          // Debug logging
+          logger.info(`Thread ${thread.id}: labelIds=${JSON.stringify(labelIds)}, isUnread=${isUnread}, read=${!isUnread}`);
+
           return {
             id: thread.id,
             snippet: thread.snippet,
@@ -85,6 +92,8 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
             subject,
             date,
             messageCount: messages.length,
+            read: !isUnread, // true if not unread, false if unread
+            labels: labelIds,
           };
         } catch (error) {
           logger.error(`Error getting thread ${thread.id}:`, error);
@@ -96,6 +105,8 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
             subject: '',
             date: '',
             messageCount: 0,
+            read: true, // Default to read if we can't determine
+            labels: [],
           };
         }
       })
@@ -297,6 +308,58 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res: express.Respo
   } catch (error) {
     logger.error('Error sending email:', error);
     return res.status(500).json({ error: 'Failed to send email' });
+  }
+});
+
+// Mark thread as read
+router.post('/threads/:threadId/read', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+  try {
+    const { accessToken } = req.user;
+    const { threadId } = req.params;
+    
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    
+    // First, get the thread to find all message IDs
+    const threadResponse = await withTimeout(
+      gmail.users.threads.get({
+        userId: 'me',
+        id: threadId,
+      }),
+      10000
+    );
+
+    const thread = threadResponse.data;
+    const messages = thread.messages || [];
+    
+    // Remove UNREAD label from all messages in the thread
+    const updatePromises = messages.map(async (message) => {
+      try {
+        await withTimeout(
+          gmail.users.messages.modify({
+            userId: 'me',
+            id: message.id!,
+            requestBody: {
+              removeLabelIds: ['UNREAD'],
+            },
+          }),
+          5000
+        );
+      } catch (error) {
+        logger.error(`Error marking message ${message.id} as read:`, error);
+        throw error;
+      }
+    });
+
+    await Promise.all(updatePromises);
+    
+    logger.info(`Thread ${threadId} marked as read`);
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error('Error marking thread as read:', error);
+    return res.status(500).json({ error: 'Failed to mark thread as read' });
   }
 });
 

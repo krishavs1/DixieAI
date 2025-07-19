@@ -9,27 +9,67 @@ import {
   SafeAreaView,
   ActivityIndicator,
   RefreshControl,
+  Modal,
+  ScrollView,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
-import { emailService, EmailThread } from '../services/emailService';
+import { emailService, EmailThread, EmailLabel, EmailCategory, EmailCategoryInfo, EmailFilter, SYSTEM_LABELS } from '../services/emailService';
 import { showMessage } from 'react-native-flash-message';
+import dayjs from 'dayjs';
 
 const HomeScreen = () => {
   const navigation = useNavigation();
   const authContext = useContext(AuthContext);
   const [threads, setThreads] = useState<EmailThread[]>([]);
+  const [originalThreads, setOriginalThreads] = useState<EmailThread[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSlow, setIsLoadingSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentCategory, setCurrentCategory] = useState<EmailCategory>('primary');
+  const [labels, setLabels] = useState<EmailLabel[]>(SYSTEM_LABELS);
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [showLabelMenu, setShowLabelMenu] = useState(false);
+  const [currentFilter, setCurrentFilter] = useState<EmailFilter>({});
+  const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
+  const [showLabelModal, setShowLabelModal] = useState(false);
+  const [showSidePanel, setShowSidePanel] = useState(false);
+  const slideAnim = useState(new Animated.Value(-300))[0];
 
   if (!authContext) {
     throw new Error('HomeScreen must be used within AuthProvider');
   }
 
   const { user, token, logout } = authContext;
+
+  // Apply filters and categorization to threads
+  const applyFiltersAndCategorization = (threadsToProcess: EmailThread[]) => {
+    let processedThreads = [...threadsToProcess];
+    
+    // Apply search filter
+    if (searchQuery) {
+      processedThreads = emailService.filterThreads(processedThreads, { searchQuery });
+    }
+    
+    // Apply label filters
+    if (selectedLabels.length > 0) {
+      processedThreads = emailService.filterThreads(processedThreads, { labels: selectedLabels });
+    }
+    
+    // Apply category filter
+    processedThreads = processedThreads.filter(thread => 
+      emailService.categorizeEmail(thread) === currentCategory
+    );
+    
+    // Sort by date (newest first)
+    processedThreads = emailService.sortThreads(processedThreads);
+    
+    setThreads(processedThreads);
+  };
 
   // Fetch threads on component mount and when token changes
   useEffect(() => {
@@ -38,7 +78,16 @@ const HomeScreen = () => {
     }
   }, [token]);
 
+  // Re-apply filters and categorization when they change
+  useEffect(() => {
+    if (originalThreads.length > 0) {
+      applyFiltersAndCategorization(originalThreads);
+    }
+  }, [currentCategory, selectedLabels, searchQuery]);
+
   const fetchThreads = async () => {
+    if (!token) return;
+    
     setIsLoading(true);
     setIsLoadingSlow(false);
     setError(null);
@@ -49,8 +98,24 @@ const HomeScreen = () => {
     }, 5000);
     
     try {
-      const fetchedThreads = await emailService.fetchThreads(token);
-      setThreads(fetchedThreads);
+      const [fetchedThreads, fetchedLabels] = await Promise.all([
+        emailService.fetchThreads(token),
+        emailService.fetchLabels(token)
+      ]);
+      
+      // Debug logging
+      console.log('Fetched threads:', fetchedThreads.map(t => ({
+        id: t.id,
+        subject: t.subject,
+        read: t.read,
+        labels: t.labels
+      })));
+      
+      setOriginalThreads(fetchedThreads);
+      setLabels(fetchedLabels);
+      
+      // Apply current categorization and filtering
+      applyFiltersAndCategorization(fetchedThreads);
     } catch (err: any) {
       let errorMessage = err.message || 'Failed to fetch emails';
       
@@ -92,8 +157,61 @@ const HomeScreen = () => {
     }
   };
 
-  const handleThreadPress = (thread: EmailThread) => {
+  const handleThreadPress = async (thread: EmailThread) => {
+    // Mark as read if it's currently unread
+    if (thread.read === false && token) {
+      try {
+        await emailService.markAsRead(token, thread.id);
+        
+        // Update local state immediately for better UX
+        setOriginalThreads(prev => prev.map(t => 
+          t.id === thread.id ? { ...t, read: true } : t
+        ));
+      } catch (error) {
+        console.error('Error marking thread as read:', error);
+        // Continue to navigate even if marking as read fails
+      }
+    }
+    
     (navigation as any).navigate('EmailDetail', { threadId: thread.id, thread });
+  };
+
+  const handleThreadLongPress = (thread: EmailThread) => {
+    setSelectedThread(thread);
+    setShowLabelModal(true);
+  };
+
+  const handleThreadLabelUpdate = async (threadId: string, labelId: string, add: boolean) => {
+    if (!token) return;
+    
+    try {
+      if (add) {
+        await emailService.addLabelToThread(token, threadId, labelId);
+      } else {
+        await emailService.removeLabelFromThread(token, threadId, labelId);
+      }
+      
+      // Update the thread in local state
+      setOriginalThreads(prev => prev.map(thread => {
+        if (thread.id === threadId) {
+          const updatedLabels = add 
+            ? [...(thread.labels || []), labelId]
+            : (thread.labels || []).filter(id => id !== labelId);
+          return { ...thread, labels: updatedLabels };
+        }
+        return thread;
+      }));
+      
+      showMessage({
+        message: add ? 'Label added' : 'Label removed',
+        type: 'success',
+      });
+    } catch (error) {
+      showMessage({
+        message: 'Failed to update label',
+        type: 'danger',
+      });
+    }
   };
 
   const handleRefresh = () => {
@@ -102,10 +220,72 @@ const HomeScreen = () => {
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
-    // For now, just filter locally - you can implement server search later
-    // if (query.length > 2) {
-    //   searchThreads(query);
-    // }
+  };
+
+  const handleCategoryChange = (category: EmailCategory) => {
+    setCurrentCategory(category);
+  };
+
+  const handleLabelToggle = (labelId: string) => {
+    setSelectedLabels(prev => 
+      prev.includes(labelId) 
+        ? prev.filter(id => id !== labelId)
+        : [...prev, labelId]
+    );
+  };
+
+  const clearFilters = () => {
+    setSelectedLabels([]);
+    setSearchQuery('');
+  };
+
+  const toggleSidePanel = () => {
+    if (showSidePanel) {
+      // Close panel
+      Animated.timing(slideAnim, {
+        toValue: -300,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setShowSidePanel(false));
+    } else {
+      // Open panel
+      setShowSidePanel(true);
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const selectCategoryFromSidePanel = (category: EmailCategory) => {
+    setCurrentCategory(category);
+    toggleSidePanel();
+  };
+
+  // Get category information
+  const getCategoryInfo = (): EmailCategoryInfo[] => {
+    const categories: EmailCategory[] = ['primary', 'social', 'promotions', 'updates'];
+    return categories.map(category => {
+      const count = originalThreads.filter(thread => 
+        emailService.categorizeEmail(thread) === category
+      ).length;
+      
+      const categoryData = {
+        primary: { name: 'Primary', color: '#4285F4', icon: 'mail' },
+        social: { name: 'Social', color: '#34A853', icon: 'people' },
+        promotions: { name: 'Promotions', color: '#FBBC04', icon: 'pricetag' },
+        updates: { name: 'Updates', color: '#EA4335', icon: 'notifications' }
+      };
+      
+      return {
+        id: category,
+        name: categoryData[category].name,
+        color: categoryData[category].color,
+        icon: categoryData[category].icon,
+        count
+      };
+    });
   };
 
   const handleVoiceCommand = () => {
@@ -115,32 +295,83 @@ const HomeScreen = () => {
     });
   };
 
-  const renderThread = ({ item }: { item: EmailThread }) => (
-    <TouchableOpacity
-      style={styles.threadItem}
-      onPress={() => handleThreadPress(item)}
-    >
-      <View style={styles.threadHeader}>
-        <Text style={styles.threadFrom} numberOfLines={1}>
-          {item.from || 'Unknown'}
+  // Helper: format time/date like Gmail
+  const formatThreadTime = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    if (
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
+    ) {
+      // Show time in h:mm A
+      return dayjs(date).format('h:mm A');
+    } else {
+      // Show date as M/D/YYYY
+      return dayjs(date).format('M/D/YYYY');
+    }
+  };
+
+  const renderThread = ({ item }: { item: EmailThread }) => {
+    // Debug logging for first few items
+    if (item.id === '198248d73322a1da' || item.id === '198245f286efc3f0') {
+      console.log(`Thread ${item.id}: read=${item.read}, subject="${item.subject}"`);
+    }
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.threadItem,
+          item.read === false && styles.unreadThread
+        ]}
+        onPress={() => handleThreadPress(item)}
+        onLongPress={() => handleThreadLongPress(item)}
+      >
+        <View style={styles.threadHeader}>
+          <View style={styles.threadFromContainer}>
+            <Text style={[
+              styles.threadFrom,
+              item.read === false ? styles.unreadText : styles.readText
+            ]} numberOfLines={1}>
+              {item.from || 'Unknown'}
+            </Text>
+            {item.starred && <Ionicons name="star" size={16} color="#F9AB00" style={styles.starIcon} />}
+            {item.important && <Ionicons name="flag" size={16} color="#FF6D01" style={styles.importantIcon} />}
+          </View>
+          <Text style={[
+            styles.threadTime,
+            item.read === false ? styles.unreadText : styles.readText
+          ]}>
+            {formatThreadTime(item.date)}
+          </Text>
+        </View>
+        <Text style={[
+          styles.threadSubject,
+          item.read === false ? styles.unreadText : styles.readText
+        ]} numberOfLines={1}>
+          {item.subject}
         </Text>
-        <Text style={styles.threadTime}>
-          {new Date(item.date).toLocaleDateString()}
+        <Text style={styles.threadSnippet} numberOfLines={2}>
+          {item.snippet}
         </Text>
-      </View>
-      <Text style={styles.threadSubject} numberOfLines={1}>
-        {item.subject}
-      </Text>
-      <Text style={styles.threadSnippet} numberOfLines={2}>
-        {item.snippet}
-      </Text>
-      <View style={styles.threadFooter}>
-        <Text style={styles.messageCount}>
-          {item.messageCount} message{item.messageCount !== 1 ? 's' : ''}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.threadFooter}>
+          <View style={styles.threadLabels}>
+            {item.labels && item.labels.slice(0, 3).map((labelId) => {
+              const label = labels.find(l => l.id === labelId);
+              return label ? (
+                <View key={labelId} style={[styles.threadLabel, { backgroundColor: label.color }]}>
+                  <Text style={styles.threadLabelText}>{label.name}</Text>
+                </View>
+              ) : null;
+            })}
+            {item.labels && item.labels.length > 3 && (
+              <Text style={styles.moreLabelText}>+{item.labels.length - 3}</Text>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -163,10 +394,15 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+            {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.greeting}>Welcome back, {user?.name || 'User'}!</Text>
+          <TouchableOpacity onPress={toggleSidePanel} style={styles.menuButton}>
+            <Ionicons name="menu" size={24} color="#666" />
+          </TouchableOpacity>
+          <Text style={styles.currentCategory}>
+            {getCategoryInfo().find(cat => cat.id === currentCategory)?.name || 'Primary'}
+          </Text>
           <TouchableOpacity onPress={logout} style={styles.logoutButton}>
             <Ionicons name="log-out-outline" size={24} color="#666" />
           </TouchableOpacity>
@@ -185,27 +421,51 @@ const HomeScreen = () => {
           <TouchableOpacity onPress={handleVoiceCommand} style={styles.voiceButton}>
             <Ionicons name="mic" size={20} color="#4285F4" />
           </TouchableOpacity>
-      </View>
-
-        {/* Quick Actions */}
-      <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleRefresh}>
-            <Ionicons name="refresh" size={16} color="#4285F4" />
-            <Text style={styles.actionText}>Refresh</Text>
-          </TouchableOpacity>
-          
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="mail-unread" size={16} color="#4285F4" />
-            <Text style={styles.actionText}>
-              Threads ({threads.length})
-            </Text>
-        </TouchableOpacity>
-          
-        <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="create" size={16} color="#4285F4" />
-            <Text style={styles.actionText}>Compose</Text>
-        </TouchableOpacity>
         </View>
+
+        {/* Label Filter */}
+        <View style={styles.labelFilterContainer}>
+          <TouchableOpacity 
+            style={styles.labelButton} 
+            onPress={() => setShowLabelMenu(!showLabelMenu)}
+          >
+            <Ionicons name="pricetag" size={16} color="#4285F4" />
+            <Text style={styles.labelText}>
+              Labels {selectedLabels.length > 0 && `(${selectedLabels.length})`}
+            </Text>
+            <Ionicons name={showLabelMenu ? "chevron-up" : "chevron-down"} size={16} color="#666" />
+          </TouchableOpacity>
+
+          {(selectedLabels.length > 0 || searchQuery) && (
+            <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
+              <Ionicons name="close-circle" size={16} color="#EA4335" />
+              <Text style={styles.clearText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Label Menu */}
+        {showLabelMenu && (
+          <View style={styles.dropdownMenu}>
+            {labels.map((label) => (
+              <TouchableOpacity
+                key={label.id}
+                style={[styles.dropdownItem, selectedLabels.includes(label.id) && styles.selectedDropdownItem]}
+                onPress={() => handleLabelToggle(label.id)}
+              >
+                <View style={styles.labelItem}>
+                  <View style={[styles.labelColor, { backgroundColor: label.color }]} />
+                  <Text style={[styles.dropdownText, selectedLabels.includes(label.id) && styles.selectedDropdownText]}>
+                    {label.name}
+                  </Text>
+                </View>
+                {selectedLabels.includes(label.id) && <Ionicons name="checkmark" size={16} color="#4285F4" />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+
       </View>
 
       {/* Content */}
@@ -240,6 +500,189 @@ const HomeScreen = () => {
             </Text>
           )}
         </View>
+      )}
+
+      {/* Floating Action Button - Compose */}
+      <TouchableOpacity style={styles.fab} onPress={() => {
+        showMessage({
+          message: 'Compose feature coming soon!',
+          type: 'info',
+        });
+      }}>
+        <Ionicons name="create" size={24} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Label Management Modal */}
+      <Modal
+        visible={showLabelModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowLabelModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Manage Labels</Text>
+              <TouchableOpacity onPress={() => setShowLabelModal(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            {selectedThread && (
+              <View style={styles.modalBody}>
+                <Text style={styles.modalSubject} numberOfLines={2}>
+                  {selectedThread.subject}
+                </Text>
+                <Text style={styles.modalFrom}>From: {selectedThread.from}</Text>
+                
+                <ScrollView style={styles.labelsList}>
+                  {labels.map((label) => {
+                    const isSelected = selectedThread.labels?.includes(label.id) || false;
+                    return (
+                      <TouchableOpacity
+                        key={label.id}
+                        style={[styles.labelOption, isSelected && styles.selectedLabelOption]}
+                        onPress={() => handleThreadLabelUpdate(selectedThread.id, label.id, !isSelected)}
+                      >
+                        <View style={styles.labelOptionContent}>
+                          <View style={[styles.labelColor, { backgroundColor: label.color }]} />
+                          <Text style={[styles.labelOptionText, isSelected && styles.selectedLabelOptionText]}>
+                            {label.name}
+                          </Text>
+                        </View>
+                        {isSelected && <Ionicons name="checkmark" size={20} color="#4285F4" />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Side Panel */}
+      {showSidePanel && (
+        <>
+          <TouchableOpacity 
+            style={styles.sidePanelOverlay} 
+            onPress={toggleSidePanel}
+            activeOpacity={1}
+          />
+          <Animated.View 
+            style={[
+              styles.sidePanel,
+              { transform: [{ translateX: slideAnim }] }
+            ]}
+          >
+            <View style={styles.sidePanelHeader}>
+              <Text style={styles.sidePanelTitle}>Gmail</Text>
+              <Text style={styles.sidePanelUser}>{user?.email || 'User'}</Text>
+            </View>
+            
+            <ScrollView style={styles.sidePanelContent}>
+              {/* Categories Section */}
+              <View style={styles.sidePanelSection}>
+                <Text style={styles.sidePanelSectionTitle}>Categories</Text>
+                {getCategoryInfo().map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.sidePanelItem,
+                      currentCategory === category.id && styles.sidePanelItemActive
+                    ]}
+                    onPress={() => selectCategoryFromSidePanel(category.id)}
+                  >
+                    <View style={styles.sidePanelItemIcon}>
+                      <Ionicons 
+                        name={category.icon as any} 
+                        size={20} 
+                        color={currentCategory === category.id ? '#4285F4' : '#6b7280'} 
+                      />
+                    </View>
+                    <Text style={[
+                      styles.sidePanelItemText,
+                      currentCategory === category.id && styles.sidePanelItemTextActive
+                    ]}>
+                      {category.name}
+                    </Text>
+                    {category.count > 0 && (
+                      <View style={styles.sidePanelItemBadge}>
+                        <Text style={styles.sidePanelItemBadgeText}>
+                          {category.count > 99 ? '99+' : category.count}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Labels Section */}
+              <View style={styles.sidePanelSection}>
+                <Text style={styles.sidePanelSectionTitle}>Labels</Text>
+                {labels.map((label) => (
+                  <TouchableOpacity
+                    key={label.id}
+                    style={styles.sidePanelItem}
+                    onPress={() => {
+                      handleLabelToggle(label.id);
+                      toggleSidePanel();
+                    }}
+                  >
+                    <View style={styles.sidePanelItemIcon}>
+                      <View style={[styles.labelColor, { backgroundColor: label.color }]} />
+                    </View>
+                    <Text style={styles.sidePanelItemText}>
+                      {label.name}
+                    </Text>
+                    {label.count && label.count > 0 && (
+                      <View style={styles.sidePanelItemBadge}>
+                        <Text style={styles.sidePanelItemBadgeText}>
+                          {label.count > 99 ? '99+' : label.count}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Other Options */}
+              <View style={styles.sidePanelSection}>
+                <Text style={styles.sidePanelSectionTitle}>More</Text>
+                <TouchableOpacity style={styles.sidePanelItem}>
+                  <View style={styles.sidePanelItemIcon}>
+                    <Ionicons name="star-outline" size={20} color="#6b7280" />
+                  </View>
+                  <Text style={styles.sidePanelItemText}>Starred</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sidePanelItem}>
+                  <View style={styles.sidePanelItemIcon}>
+                    <Ionicons name="time-outline" size={20} color="#6b7280" />
+                  </View>
+                  <Text style={styles.sidePanelItemText}>Snoozed</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sidePanelItem}>
+                  <View style={styles.sidePanelItemIcon}>
+                    <Ionicons name="flag-outline" size={20} color="#6b7280" />
+                  </View>
+                  <Text style={styles.sidePanelItemText}>Important</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sidePanelItem}>
+                  <View style={styles.sidePanelItemIcon}>
+                    <Ionicons name="send-outline" size={20} color="#6b7280" />
+                  </View>
+                  <Text style={styles.sidePanelItemText}>Sent</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.sidePanelItem}>
+                  <View style={styles.sidePanelItemIcon}>
+                    <Ionicons name="document-outline" size={20} color="#6b7280" />
+                  </View>
+                  <Text style={styles.sidePanelItemText}>Drafts</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </Animated.View>
+        </>
       )}
     </SafeAreaView>
   );
@@ -292,24 +735,6 @@ const styles = StyleSheet.create({
   voiceButton: {
     padding: 5,
   },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 20,
-  },
-  actionText: {
-    marginLeft: 5,
-    fontSize: 14,
-    color: '#4285F4',
-    fontWeight: '500',
-  },
   content: {
     flex: 1,
   },
@@ -333,7 +758,6 @@ const styles = StyleSheet.create({
   },
   threadFrom: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#333',
     flex: 1,
   },
@@ -344,7 +768,6 @@ const styles = StyleSheet.create({
   },
   threadSubject: {
     fontSize: 14,
-    fontWeight: '500',
     color: '#444',
     marginBottom: 5,
   },
@@ -434,6 +857,400 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     textAlign: 'center',
+  },
+  // Sorting and filtering styles
+  controlsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e1e5e9',
+    marginRight: 8,
+  },
+  sortText: {
+    marginHorizontal: 8,
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '500',
+  },
+  labelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e1e5e9',
+    marginRight: 8,
+  },
+  labelText: {
+    marginHorizontal: 8,
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '500',
+  },
+  clearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  clearText: {
+    marginLeft: 4,
+    fontSize: 12,
+    color: '#dc2626',
+    fontWeight: '500',
+  },
+  dropdownMenu: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    maxHeight: 200,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f3f4',
+  },
+  selectedDropdownItem: {
+    backgroundColor: '#e8f0fe',
+  },
+  dropdownText: {
+    fontSize: 14,
+    color: '#3c4043',
+  },
+  selectedDropdownText: {
+    color: '#1a73e8',
+    fontWeight: '500',
+  },
+  labelItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  labelColor: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  // Thread display styles
+  unreadThread: {
+    backgroundColor: '#f8f9fa',
+    borderLeftWidth: 3,
+    borderLeftColor: '#4285F4',
+  },
+  threadFromContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  unreadText: {
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  readText: {
+    fontWeight: '400',
+    color: '#666',
+  },
+  starIcon: {
+    marginLeft: 8,
+  },
+  importantIcon: {
+    marginLeft: 4,
+  },
+  threadLabels: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  threadLabel: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginRight: 4,
+  },
+  threadLabelText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  moreLabelText: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontStyle: 'italic',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  modalSubject: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 8,
+  },
+  modalFrom: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 20,
+  },
+  labelsList: {
+    maxHeight: 300,
+  },
+  labelOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+    backgroundColor: '#f8f9fa',
+  },
+  selectedLabelOption: {
+    backgroundColor: '#e8f0fe',
+    borderWidth: 1,
+    borderColor: '#4285F4',
+  },
+  labelOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  labelOptionText: {
+    fontSize: 14,
+    color: '#3c4043',
+    marginLeft: 8,
+  },
+  selectedLabelOptionText: {
+    color: '#1a73e8',
+    fontWeight: '500',
+  },
+  // Category tab styles
+  categoryTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  categoryTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginHorizontal: 4,
+  },
+  activeCategoryTab: {
+    backgroundColor: '#4285F4',
+  },
+  categoryText: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 4,
+    color: '#6b7280',
+  },
+  activeCategoryText: {
+    color: '#fff',
+  },
+  categoryBadge: {
+    marginLeft: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  categoryBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  labelFilterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  menuButton: {
+    padding: 8,
+  },
+  currentCategory: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f2937',
+    flex: 1,
+    textAlign: 'center',
+  },
+  // Side panel styles
+  sidePanelOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+  },
+  sidePanel: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 300,
+    height: '100%',
+    backgroundColor: '#fff',
+    zIndex: 1001,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  sidePanelHeader: {
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  sidePanelTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 8,
+  },
+  sidePanelUser: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  sidePanelContent: {
+    flex: 1,
+    paddingTop: 20,
+  },
+  sidePanelSection: {
+    marginBottom: 20,
+  },
+  sidePanelSectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  sidePanelItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  sidePanelItemActive: {
+    backgroundColor: '#e8f0fe',
+    borderRightWidth: 3,
+    borderRightColor: '#4285F4',
+  },
+  sidePanelItemIcon: {
+    marginRight: 16,
+    width: 20,
+    alignItems: 'center',
+  },
+  sidePanelItemText: {
+    fontSize: 16,
+    color: '#1f2937',
+    flex: 1,
+  },
+  sidePanelItemTextActive: {
+    color: '#4285F4',
+    fontWeight: '500',
+  },
+  sidePanelItemBadge: {
+    backgroundColor: '#4285F4',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  sidePanelItemBadgeText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  // Floating Action Button
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#EA4335',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000,
   },
 });
 
