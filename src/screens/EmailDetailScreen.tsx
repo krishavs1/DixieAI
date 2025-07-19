@@ -243,6 +243,10 @@ const EmailDetailScreen = () => {
     // Use processed content if available, otherwise fall back to the backend-processed body
     const content = processedContent || message.body || message.snippet;
     
+    console.log(`Message ${index} content length:`, content?.length);
+    console.log(`Message ${index} is HTML:`, isHtmlContent(content));
+    console.log(`Message ${index} content preview:`, content?.substring(0, 100));
+    
     return (
       <View key={message.id} style={[styles.messageContainer, isDarkMode && styles.messageContainerDark]}>
         {renderMessageHeader(message, index, isExpanded)}
@@ -251,16 +255,14 @@ const EmailDetailScreen = () => {
           <View style={styles.messageContent}>
             <View style={styles.messageBody}>
               {isHtmlContent(content) ? (
-                <View style={{ minHeight: 100 }}>
-                  <EmailRenderer
-                    html={content}
-                    plainText={message.plainTextContent}
-                    onLinkPress={(url) => {
-                      // Handle link press
-                      console.log('Link pressed:', url);
-                    }}
+                <EmailRenderer
+                  html={content}
+                  plainText={message.plainTextContent}
+                  onLinkPress={(url) => {
+                    // Handle link press
+                    console.log('Link pressed:', url);
+                  }}
                 />
-                </View>
               ) : (
                 <Text style={[styles.bodyText, isDarkMode && styles.bodyTextDark]}>
                   {content}
@@ -370,7 +372,11 @@ const EmailDetailScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={[styles.content, isDarkMode && styles.contentDark]}>
+      <ScrollView 
+        style={[styles.content, isDarkMode && styles.contentDark]}
+        contentContainerStyle={{ paddingBottom: 16 }}
+        showsVerticalScrollIndicator={true}
+      >
         {emailThread?.messages.map((message, index) => renderMessage(message, index))}
       </ScrollView>
 
@@ -552,12 +558,12 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
     padding: 16,
+    paddingBottom: 8, // Reduce bottom padding
     borderTopWidth: 1,
     borderTopColor: '#f1f3f4',
   },
 
   messageBody: {
-    minHeight: 50,
     backgroundColor: 'transparent',
   },
   bodyText: {

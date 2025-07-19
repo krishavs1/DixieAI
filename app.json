@@ -16,7 +16,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.dixieai.mobile"
+      "bundleIdentifier": "com.dixieai.mobile",
+      "infoPlist": {
+        "REVERSED_CLIENT_ID": "com.googleusercontent.apps.440630945257-da4rqdkj9u79e7ufb8e3063bs35ilbcc"
+      }
     },
     "android": {
       "package": "com.dixieai.mobile",
@@ -38,7 +41,7 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "iosUrlScheme": "com.googleusercontent.apps.440630945257-d3gbupl3uaafv10sib53r2q6eh4mqpku"
+          "iosUrlScheme": "com.googleusercontent.apps.440630945257-da4rqdkj9u79e7ufb8e3063bs35ilbcc"
         }
       ]
     ],
