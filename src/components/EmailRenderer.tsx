@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -6,6 +6,20 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Your master "Gmail-style" CSS (applied to every email)
 const GMAIL_CSS = `
+/* ===== HTML & BODY RESET ===== */
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+/* email templates often use width="600" on tables; override that too */
+table[width], td[width], img[width] {
+  width: auto !important;
+  max-width: 100% !important;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -105,8 +119,8 @@ table {
   max-width: 100%;
   margin: 16px 0;
   font-size: 14px;
-}
-td, th {
+    }
+    td, th {
   padding: 8px 12px;
   border: 1px solid #dadce0;
   text-align: left;
@@ -258,8 +272,8 @@ table, td, th {
   padding: 0 !important;
 }
 table[border] { 
-  border: none !important; 
-}
+      border: none !important;
+    }
 
 /* 2. Enforce fluid widths */
 table { 
@@ -299,9 +313,29 @@ img {
   width: auto !important;
   max-width: 100% !important;
 }
+
+/* ===== GMAIL STYLE RULES (SCOPED) ===== */
+/* only apply the Gmail border to non-layout tables */
+.gmail-content table:not([role="presentation"]) td,
+.gmail-content table:not([role="presentation"]) th {
+  padding: 8px 12px;
+  border: 1px solid #dadce0;
+}
+
+/* collapse any inline-styled width wrappers */
+.gmail-content div[style*="width"] {
+  width: auto !important;
+  max-width: 100% !important;
+}
+
+/* absolute safety cap */
+* {
+  box-sizing: border-box !important;
+  max-width: 100% !important;
+}
 `;
 
-// JS snippet injected to measure content height
+// JS snippet injected to measure content height with continuous monitoring
 const MEASURE_JS = `
 (function() {
   function sendHeight() {
@@ -311,8 +345,23 @@ const MEASURE_JS = `
     );
     window.ReactNativeWebView.postMessage(h);
   }
+
+  // initial measurement
   window.addEventListener('load', sendHeight);
-  setTimeout(sendHeight, 500);
+  
+  // catch late images
+  document.querySelectorAll('img').forEach(img =>
+    img.addEventListener('load', sendHeight)
+  );
+  
+  // catch any DOM changes (e.g. tracking pixels, injected wrappers…)
+  new MutationObserver(sendHeight).observe(
+    document.body,
+    { childList: true, subtree: true }
+  );
+  
+  // fallback in case something slips through
+  setTimeout(sendHeight, 2000);
 })();
 true;
 `;
@@ -323,30 +372,149 @@ interface EmailRendererProps {
 
 export default function EmailRenderer({ html }: EmailRendererProps) {
   const [height, setHeight] = useState(0);
+  const [viewInBrowserUrl, setViewInBrowserUrl] = useState<string | null>(null);
+  const [urlFailed, setUrlFailed] = useState(false);
   const webviewRef = useRef<WebView>(null);
 
   // Debug log to confirm new code is running
   console.log('🎯 NEW EmailRenderer loaded! HTML length:', html?.length || 0);
 
+  // Extract view-in-browser URL
+  const extractViewInBrowserUrl = (html: string): string | null => {
+    // Look for common "View in browser" link patterns
+    const patterns = [
+      // Standard "View in browser" links
+      /<a[^>]*href="([^"]*)"[^>]*>.*?view.*?browser.*?<\/a>/i,
+      /<a[^>]*href="([^"]*)"[^>]*>.*?browser.*?view.*?<\/a>/i,
+      /<a[^>]*href="([^"]*)"[^>]*>.*?view.*?webpage.*?<\/a>/i,
+      /<a[^>]*href="([^"]*)"[^>]*>.*?webpage.*?view.*?<\/a>/i,
+      /<a[^>]*href="([^"]*)"[^>]*>.*?view.*?as.*?webpage.*?<\/a>/i,
+      /<a[^>]*href="([^"]*)"[^>]*>.*?web.*?version.*?<\/a>/i,
+      /<a[^>]*href="([^"]*)"[^>]*>.*?online.*?version.*?<\/a>/i,
+      /<a[^>]*href="([^"]*)"[^>]*>.*?view.*?online.*?<\/a>/i,
+      /<a[^>]*href="([^"]*)"[^>]*>.*?read.*?online.*?<\/a>/i,
+      /<a[^>]*href="([^"]*)"[^>]*>.*?open.*?in.*?browser.*?<\/a>/i,
+      /<a[^>]*href="([^"]*)"[^>]*>.*?browser.*?version.*?<\/a>/i,
+      // ESP-specific patterns
+      /<a[^>]*href="([^"]*mailchimp[^"]*)"[^>]*>/i,
+      /<a[^>]*href="([^"]*constantcontact[^"]*)"[^>]*>/i,
+      /<a[^>]*href="([^"]*campaign-archive[^"]*)"[^>]*>/i,
+      /<a[^>]*href="([^"]*email\..*?\.com[^"]*)"[^>]*>/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match && match[1]) {
+        let url = match[1];
+        // Clean up the URL
+        url = url.replace(/&amp;/g, '&');
+        url = url.replace(/&lt;/g, '<');
+        url = url.replace(/&gt;/g, '>');
+        
+        // Validate it's a real URL and not a login page
+        if (url.startsWith('http') && url.includes('.') && 
+            !url.includes('login') && 
+            !url.includes('signin') && 
+            !url.includes('auth') &&
+            !url.includes('account') &&
+            !url.includes('rewards')) {
+          console.log('🌐 Found view-in-browser URL:', url);
+          return url;
+        }
+      }
+    }
+
+    console.log('📧 No valid view-in-browser URL found, using Gmail-style processing');
+    return null;
+  };
+
+  // Extract view-in-browser URL on component mount
+  useEffect(() => {
+    const url = extractViewInBrowserUrl(html);
+    setViewInBrowserUrl(url);
+    setUrlFailed(false);
+  }, [html]);
+
   // Strip out any existing <style> blocks in the raw HTML
-  const sanitized = html.replace(/<style[\s\S]*?<\/style>/gi, '');
+  let sanitized = html
+    // nuke all <style>…</style>
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    // remove anything (dots, nbsp's, zero-width spaces…) before the first table/div
+    .replace(/^[^<]*(?=<(?:table|div))/i, '');
 
   // Wrap in a minimal document + our Gmail CSS
   const wrappedHTML = `
-    <!DOCTYPE html>
-    <html>
-      <head>
+      <!DOCTYPE html>
+      <html>
+        <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <style>${GMAIL_CSS}</style>
-      </head>
+        </head>
       <body>
         <div class="gmail-content">
           ${sanitized}
-        </div>
-      </body>
-    </html>
-  `;
+          </div>
+        </body>
+      </html>
+    `;
 
+  const handleWebViewMessage = (event: any) => {
+    try {
+      const data = parseInt(event.nativeEvent.data, 10);
+      if (!isNaN(data) && data > 0) setHeight(data);
+    } catch (error) {
+      console.error('Error parsing WebView message:', error);
+    }
+  };
+
+  const handleLoadEnd = () => {
+    console.log('WebView loaded successfully');
+  };
+
+  const handleError = (error: any) => {
+    console.error('WebView error:', error);
+    // If URL failed, fall back to HTML processing
+    if (viewInBrowserUrl && !urlFailed) {
+      console.log('🌐 URL failed, falling back to Gmail-style processing');
+      setUrlFailed(true);
+      setViewInBrowserUrl(null);
+    }
+  };
+
+  // If we found a view-in-browser URL and it hasn't failed, use it directly
+  if (viewInBrowserUrl && !urlFailed) {
+    return (
+      <View style={styles.container}>
+        {height === 0 && (
+          <ActivityIndicator style={StyleSheet.absoluteFill} size="large" />
+        )}
+        
+                  <WebView
+          ref={webviewRef}
+          originWhitelist={["*"]}
+          source={{ uri: viewInBrowserUrl }}
+          // Use iOS Safari user agent for best compatibility
+          userAgent={'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/605.1'}
+          style={[styles.webview, { height }]}
+          injectedJavaScript={MEASURE_JS}
+          onMessage={handleWebViewMessage}
+          onLoadEnd={handleLoadEnd}
+          onError={handleError}
+          mixedContentMode="compatibility"
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          startInLoadingState={false}
+          cacheEnabled={true}
+          scalesPageToFit={true}
+          scrollEnabled={false}
+        />
+      </View>
+    );
+  }
+
+  // Fallback: process HTML content with Gmail-style CSS
   return (
     <View style={styles.container}>
       {height === 0 && (
@@ -358,10 +526,9 @@ export default function EmailRenderer({ html }: EmailRendererProps) {
         source={{ html: wrappedHTML }}
         style={[styles.webview, { height }]}
         injectedJavaScript={MEASURE_JS}
-        onMessage={e => {
-          const h = parseInt(e.nativeEvent.data, 10);
-          if (!isNaN(h) && h > 0) setHeight(h);
-        }}
+        onMessage={handleWebViewMessage}
+        onLoadEnd={handleLoadEnd}
+        onError={handleError}
         javaScriptEnabled
         domStorageEnabled
         scrollEnabled={false}
