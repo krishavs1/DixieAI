@@ -206,7 +206,14 @@ const EmailDetailScreen = () => {
     const isLastMessage = index === (emailThread?.messages.length || 0) - 1;
     
     return (
-      <View style={[styles.messageHeader, isDarkMode && styles.messageHeaderDark]}>
+      <View style={[
+        { 
+          backgroundColor: 'transparent',
+          borderTopWidth: 0,
+          borderBottomWidth: 0,
+          padding: 0
+        }
+      ]}>
         <TouchableOpacity 
           style={styles.messageHeaderContent}
           onPress={() => toggleMessageExpansion(message.id)}
@@ -368,7 +375,13 @@ const EmailDetailScreen = () => {
       </View>
 
       <ScrollView
-        style={[styles.content, isDarkMode && styles.contentDark]}
+        style={[
+          { 
+            flex: 1,
+            backgroundColor: 'transparent',
+            paddingHorizontal: 0
+          }
+        ]}
         contentContainerStyle={{ flexGrow: 1 }}
         nestedScrollEnabled={true}
       >
@@ -378,8 +391,13 @@ const EmailDetailScreen = () => {
             <View
               key={message.id}
               style={[
-                styles.messageContainer,
-                isDarkMode && styles.messageContainerDark,
+                { 
+                  backgroundColor: 'transparent',
+                  marginVertical: 0,
+                  borderRadius: 0,
+                  shadowOpacity: 0,
+                  elevation: 0
+                }
               ]}
             >
               {renderMessageHeader(message, index, isExpanded)}
@@ -388,21 +406,19 @@ const EmailDetailScreen = () => {
                 <View
                   style={[
                     styles.messageContent,
-                    { flex: 1 }
+                    { 
+                      flex: 1,
+                      backgroundColor: 'transparent',
+                      borderTopWidth: 0,
+                      padding: 0
+                    }
                   ]}
                 >
                   <View style={styles.messageBody}>
                     {isHtmlContent(message.body || message.snippet) ? (
-                      <View style={{ marginHorizontal: -16 }}>
-                        <EmailRenderer
-                          html={message.body || message.snippet}
-                          plainText={message.plainTextContent}
-                          onLinkPress={(url) => {
-                            console.log('Link pressed:', url);
-                          }}
-                          style={{ flex: 1, minHeight: 80 }}
-                        />
-                      </View>
+                      <EmailRenderer
+                        html={message.body || message.snippet}
+                      />
                     ) : (
                       <Text style={[styles.bodyText, isDarkMode && styles.bodyTextDark]}>
                         {message.body || message.snippet}
@@ -493,7 +509,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 8, // Reduced from 16 to match Gmail's narrow gutters
     backgroundColor: '#F8F9FA',
   },
   contentDark: {

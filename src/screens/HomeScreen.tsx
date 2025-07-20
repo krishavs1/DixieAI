@@ -18,6 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
+import * as Clipboard from 'expo-clipboard';
 
 import { useNavigation } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
@@ -48,6 +49,8 @@ const HomeScreen = () => {
   const [speechRate, setSpeechRate] = useState(0.8);
   const [selectedVoice, setSelectedVoice] = useState('en-GB');
   const [availableVoices, setAvailableVoices] = useState<string[]>([]);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceCommand, setVoiceCommand] = useState('');
   const slideAnim = useState(new Animated.Value(-300))[0];
 
   if (!authContext) {
@@ -244,6 +247,32 @@ const HomeScreen = () => {
     setShowLabelModal(true);
   };
 
+  const handleDebugEmail = async (thread: EmailThread) => {
+    if (!token) return;
+    
+    try {
+      // Fetch the full email content
+      const emailContent = await emailService.fetchEmailContent(token, thread.id);
+      
+      // Copy to clipboard
+      await Clipboard.setStringAsync(emailContent);
+      
+      showMessage({
+        message: '📋 Email HTML copied to clipboard!',
+        type: 'success',
+        duration: 2000,
+      });
+      
+      console.log('Email HTML copied:', emailContent.substring(0, 200) + '...');
+    } catch (error) {
+      console.error('Error fetching email content:', error);
+      showMessage({
+        message: '❌ Failed to copy email HTML',
+        type: 'danger',
+      });
+    }
+  };
+
   const handleThreadLabelUpdate = async (threadId: string, labelId: string, add: boolean) => {
     if (!token) return;
     
@@ -335,7 +364,7 @@ const HomeScreen = () => {
       ).length;
       
       const categoryData = {
-        primary: { name: 'Primary', color: '#4285F4', icon: 'mail' },
+        primary: { name: 'nigga', color: '#4285F4', icon: 'mail' },
         social: { name: 'Social', color: '#34A853', icon: 'people' },
         promotions: { name: 'Promotions', color: '#FBBC04', icon: 'pricetag' },
         updates: { name: 'Updates', color: '#EA4335', icon: 'notifications' },
@@ -353,15 +382,99 @@ const HomeScreen = () => {
   };
 
   const handleVoiceCommand = () => {
-    // For now, trigger both classification and summary
-    classifyEmailsForReply();
-    generateInboxSummary();
+    // For now, show a simple command picker
+    // In the future, we can integrate with Expo's speech recognition
+    Alert.alert(
+      'Voice Commands',
+      'Choose a command:',
+      [
+        { text: '📊 Generate Summary', onPress: () => processVoiceCommand('summary') },
+        { text: '🔍 Search Emails', onPress: () => processVoiceCommand('search') },
+        { text: '🔴 Show Important', onPress: () => processVoiceCommand('important') },
+        { text: '📝 Show Reply Needed', onPress: () => processVoiceCommand('reply') },
+        { text: '🧹 Clear Filters', onPress: () => processVoiceCommand('clear') },
+        { text: '🔄 Refresh', onPress: () => processVoiceCommand('refresh') },
+        { text: '❓ Help', onPress: () => processVoiceCommand('help') },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const processVoiceCommand = (command: string) => {
+    console.log('Processing voice command:', command);
     
-    // TODO: Add voice recognition later
-    // showMessage({
-    //   message: 'Voice commands coming soon!',
-    //   type: 'info',
-    // });
+    // Generate inbox summary
+    if (command.includes('summary') || command.includes('overview') || command.includes('analyze')) {
+      showMessage({
+        message: '📊 Generating inbox summary...',
+        type: 'success',
+      });
+      generateInboxSummary();
+    }
+    
+    // Search for specific terms
+    else if (command.includes('search') || command.includes('find')) {
+      // For now, just clear search and show message
+      setSearchQuery('');
+      showMessage({
+        message: '🔍 Search cleared - use the search bar above',
+        type: 'info',
+      });
+    }
+    
+    // Show important emails
+    else if (command.includes('important') || command.includes('urgent')) {
+      setCurrentCategory('important' as EmailCategory);
+      showMessage({
+        message: '🔴 Showing important emails',
+        type: 'success',
+      });
+    }
+    
+    // Show emails needing reply
+    else if (command.includes('reply') || command.includes('respond')) {
+      setCurrentCategory('reply' as EmailCategory);
+      showMessage({
+        message: '📝 Showing emails needing reply',
+        type: 'success',
+      });
+    }
+    
+    // Clear filters
+    else if (command.includes('clear') || command.includes('reset')) {
+      clearFilters();
+      showMessage({
+        message: '🧹 Cleared all filters',
+        type: 'success',
+      });
+    }
+    
+    // Refresh emails
+    else if (command.includes('refresh') || command.includes('update')) {
+      fetchThreads();
+      showMessage({
+        message: '🔄 Refreshing emails...',
+        type: 'info',
+      });
+    }
+    
+    // Help
+    else if (command.includes('help') || command.includes('commands')) {
+      showMessage({
+        message: '🎤 Say: "summary", "search [term]", "important", "reply", "clear", "refresh", or "help"',
+        type: 'info',
+        duration: 5000,
+      });
+    }
+    
+    // Unknown command
+    else {
+      showMessage({
+        message: `❓ Unknown command: "${command}". Say "help" for available commands.`,
+        type: 'warning',
+        duration: 3000,
+      });
+    }
   };
 
   // Test function to manually add badges for debugging
@@ -703,6 +816,12 @@ const HomeScreen = () => {
               <Text style={styles.moreLabelText}>+{item.labels.length - 3}</Text>
             )}
           </View>
+          <TouchableOpacity 
+            style={styles.debugButton}
+            onPress={() => handleDebugEmail(item)}
+          >
+            <Ionicons name="code" size={16} color="#666" />
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -857,7 +976,11 @@ const HomeScreen = () => {
             <Ionicons name="menu" size={24} color="#666" />
           </TouchableOpacity>
           <Text style={styles.currentCategory}>
-            {getCategoryInfo().find(cat => cat.id === currentCategory)?.name || 'Primary'}
+            {currentCategory === 'promotions' ? 'Promotions' : 
+             currentCategory === 'primary' ? 'Primary' :
+             currentCategory === 'social' ? 'Social' :
+             currentCategory === 'updates' ? 'Updates' :
+             currentCategory === 'sent' ? 'Sent' : 'Primary'}
           </Text>
           <TouchableOpacity onPress={logout} style={styles.logoutButton}>
             <Ionicons name="log-out-outline" size={24} color="#666" />
@@ -877,27 +1000,13 @@ const HomeScreen = () => {
           <TouchableOpacity onPress={handleVoiceCommand} style={styles.voiceButton}>
             <Ionicons name="mic" size={20} color="#4285F4" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={testBadges} style={styles.testButton}>
-            <Ionicons name="bug" size={20} color="#FF6D01" />
-          </TouchableOpacity>
+
+
           <TouchableOpacity onPress={generateInboxSummary} style={styles.summaryButton}>
             <Ionicons name="analytics" size={20} color="#34A853" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={testSpeech} style={styles.testButton}>
-            <Ionicons name="volume-high" size={20} color="#9C27B0" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={showSpeechTips} style={styles.testButton}>
+          <TouchableOpacity onPress={() => processVoiceCommand('help')} style={styles.helpButton}>
             <Ionicons name="help-circle" size={20} color="#607D8B" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={testBasicAudio} style={styles.testButton}>
-            <Ionicons name="musical-notes" size={20} color="#FF5722" />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={previewAllVoices} 
-            onLongPress={changeVoice}
-            style={styles.testButton}
-          >
-            <Ionicons name="person" size={20} color="#4CAF50" />
           </TouchableOpacity>
         </View>
 
@@ -1019,35 +1128,24 @@ const HomeScreen = () => {
               </View>
               <View style={styles.summaryControls}>
                 {!isGeneratingSummary && summaryText && (
-                  <>
-                    <TouchableOpacity 
-                      onPress={() => speakSummary(summaryText)}
-                      style={styles.speechButton}
-                    >
-                      <Ionicons 
-                        name={isSpeaking ? "pause" : "volume-high"} 
-                        size={20} 
-                        color={isSpeaking ? "#FF6D01" : "#4285F4"} 
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      onPress={adjustSpeechRate}
-                      style={styles.speedButton}
-                    >
-                      <Text style={styles.speedText}>{speechRate}x</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      onPress={changeVoice}
-                      style={styles.voiceButton}
-                    >
-                      <Text style={styles.voiceText}>{selectedVoice}</Text>
-                    </TouchableOpacity>
-                  </>
+                  <TouchableOpacity 
+                    onPress={() => speakSummary(summaryText)}
+                    style={styles.speechButton}
+                  >
+                    <Ionicons 
+                      name={isSpeaking ? "pause" : "volume-high"} 
+                      size={20} 
+                      color={isSpeaking ? "#FF6D01" : "#4285F4"} 
+                    />
+                  </TouchableOpacity>
                 )}
-                <TouchableOpacity onPress={() => setShowSummaryModal(false)}>
-                  <Ionicons name="close" size={24} color="#666" />
-                </TouchableOpacity>
               </View>
+              <TouchableOpacity 
+                onPress={() => setShowSummaryModal(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
             </View>
             
             <View style={styles.modalBody}>
@@ -1243,9 +1341,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  voiceButton: {
-    padding: 5,
-  },
+
   testButton: {
     padding: 5,
   },
@@ -1766,10 +1862,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e1e5e9',
   },
+  listeningButton: {
+    backgroundColor: '#FFE6E6',
+    borderWidth: 2,
+    borderColor: '#FF4444',
+  },
   voiceText: {
     fontSize: 14,
     color: '#1f2937',
     fontWeight: '500',
+  },
+  voiceCommandText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    marginLeft: 8,
+    flex: 1,
+  },
+  helpButton: {
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e1e5e9',
+    marginLeft: 8,
+  },
+  debugButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  closeButton: {
+    padding: 5,
   },
 });
 

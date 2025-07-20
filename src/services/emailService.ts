@@ -547,4 +547,40 @@ export const emailService = {
       throw error;
     }
   },
+
+  async fetchEmailContent(token: string, threadId: string): Promise<string> {
+    try {
+      const baseURL = await getBaseURL();
+      const response = await retryFetch(() =>
+        fetchWithTimeout(`${baseURL}/api/email/threads/${threadId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }, API_CONFIG.TIMEOUT)
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Authentication failed. Please log in again.');
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const thread = data.thread;
+      
+      if (!thread || !thread.messages || thread.messages.length === 0) {
+        throw new Error('No email content found');
+      }
+
+      // Get the latest message's body content
+      const latestMessage = thread.messages[thread.messages.length - 1];
+      return latestMessage.body || latestMessage.rawBody || 'No content available';
+    } catch (error) {
+      console.error('Error fetching email content:', error);
+      throw error;
+    }
+  },
 }; 

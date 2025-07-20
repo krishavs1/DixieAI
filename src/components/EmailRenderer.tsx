@@ -1,449 +1,384 @@
-import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  useWindowDimensions,
-  useColorScheme,
-  Linking,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import RenderHtml from 'react-native-render-html';
+import React, { useState, useRef } from 'react';
+import { View, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-interface EmailRendererProps {
-  html: string;
-  plainText?: string;
-  onLinkPress?: (url: string) => void;
-  style?: any;
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Your master "Gmail-style" CSS (applied to every email)
+const GMAIL_CSS = `
+* {
+  box-sizing: border-box;
 }
 
-const EmailRenderer: React.FC<EmailRendererProps> = ({
-  html,
-  plainText,
-  onLinkPress,
-  style,
-}) => {
-  const { width } = useWindowDimensions();
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === 'dark';
-  
-  const [renderMethod, setRenderMethod] = useState<'auto' | 'webview' | 'native'>('auto');
-  const [webViewHeight, setWebViewHeight] = useState(400);
+body {
+  font-family: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #3c4043;
+  background-color: #ffffff;
+  margin: 0;
+  padding: 0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
 
+/* Gmail-style typography */
+p {
+  margin: 0 0 1em 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #3c4043;
+}
 
+div, span {
+  font-size: 14px;
+  line-height: 1.4;
+  color: #3c4043;
+}
 
-  // Analyze email complexity to determine best rendering method
-  const emailAnalysis = useMemo(() => {
-    const hasImages = html.includes('<img') || html.includes('background-image');
-    const hasComplexLayout = html.includes('<table') || html.includes('display:') || html.includes('position:');
-    const hasInlineStyles = html.includes('style=');
-    const hasExternalCSS = html.includes('<style') || html.includes('@media');
-    const imageCount = (html.match(/<img/g) || []).length;
-    
-    // Check if this is basically just text content (preserve style blocks)
-    const textContent = html.replace(/<[^>]*>/g, '').trim();
-    const isBasicallyText = textContent.length > 0 && textContent.length < 500 && !hasImages && imageCount === 0;
-    
-    return {
-      hasImages,
-      hasComplexLayout,
-      hasInlineStyles,
-      hasExternalCSS,
-      imageCount,
-      isBasicallyText,
-      complexity: isBasicallyText ? 0 : (hasImages ? 2 : 0) + (hasComplexLayout ? 2 : 0) + (hasInlineStyles ? 1 : 0) + (hasExternalCSS ? 1 : 0) + (imageCount > 3 ? 2 : 0),
-    };
-  }, [html]);
+/* Gmail-style links */
+a {
+  color: #1a73e8;
+  text-decoration: none;
+  cursor: pointer;
+}
+a:hover {
+  text-decoration: underline;
+}
 
-  // Auto-determine if WebView should be used
-  const shouldUseWebView = useMemo(() => {
-    if (renderMethod === 'webview') return true;
-    if (renderMethod === 'native') return false;
-    // auto-mode: only use WebView if it really is complex HTML
-    return emailAnalysis.complexity >= 4;    // tweak threshold to taste
-  }, [renderMethod, emailAnalysis]);
+/* Gmail-style headers */
+h1 {
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.3;
+  margin: 0 0 16px 0;
+  color: #3c4043;
+}
+h2 {
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.3;
+  margin: 0 0 14px 0;
+  color: #3c4043;
+}
+h3 {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 0 0 12px 0;
+  color: #3c4043;
+}
+h4, h5, h6 {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 0 0 10px 0;
+  color: #3c4043;
+}
 
+/* Gmail-style emphasis */
+strong, b {
+  font-weight: 500;
+  color: #3c4043;
+}
+em, i {
+  font-style: italic;
+  color: #3c4043;
+}
 
+/* Gmail-style lists */
+ul, ol {
+  margin: 0 0 1em 0;
+  padding-left: 24px;
+}
+li {
+  margin-bottom: 0.25em;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #3c4043;
+}
 
-  // Minimal WebView CSS - preserve original email design
-  const webViewCSS = `
-    /* Basic mobile viewport setup */
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow-x: hidden;
-      -webkit-text-size-adjust: 100%;
-    }
-    
-    /* Basic responsive image handling */
-    img {
-      max-width: 100% !important;
-      height: auto !important;
-    }
-    
-    /* Basic table responsiveness */
-    table {
-      max-width: 100% !important;
-    }
-    
-    /* Hide email preheaders */
-    [style*="display:none"], 
-    [style*="display: none"],
-    .preheader,
-    [class*="preheader"] {
-      display: none !important;
-    }
-    
-    /* Basic box-sizing for mobile */
-    * {
-      box-sizing: border-box;
-    }
-    
-    /* Dark mode support - let email's styles take precedence */
-    @media (prefers-color-scheme: dark) {
-      /* Preserve original dark mode adaptations */
-    }
+/* Gmail-style tables */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 100%;
+  margin: 16px 0;
+  font-size: 14px;
+}
+td, th {
+  padding: 8px 12px;
+  border: 1px solid #dadce0;
+  text-align: left;
+  vertical-align: top;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #3c4043;
+}
+th {
+  background-color: #f8f9fa;
+  font-weight: 500;
+}
+
+/* Gmail-style images */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 8px 0;
+  border-radius: 8px;
+}
+
+/* Gmail-style blockquotes */
+blockquote {
+  border-left: 4px solid #dadce0;
+  margin: 16px 0;
+  padding: 0 0 0 16px;
+  color: #5f6368;
+  font-style: italic;
+}
+
+/* Gmail-style quoted sections */
+details {
+  margin: 16px 0;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  background-color: #f8f9fa;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: #5f6368;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  user-select: none;
+  transition: background-color 0.2s ease;
+}
+summary:hover {
+  background-color: #f1f3f4;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+details[open] summary {
+  border-bottom: 1px solid #dadce0;
+}
+details > div {
+  padding: 16px;
+  background-color: #ffffff;
+}
+
+/* Gmail-style code blocks */
+pre {
+  background-color: #f8f9fa;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: 'Roboto Mono', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 16px 0;
+}
+code {
+  background-color: #f8f9fa;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: 'Roboto Mono', 'Courier New', monospace;
+  font-size: 13px;
+  color: #3c4043;
+}
+
+/* Gmail-style horizontal rules */
+hr {
+  border: none;
+  border-top: 1px solid #dadce0;
+  margin: 24px 0;
+}
+
+/* Gmail-style image placeholders */
+.blocked-image {
+  border: 1px dashed #dadce0;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 8px 0;
+  background-color: #f8f9fa;
+  text-align: center;
+  font-size: 13px;
+  color: #5f6368;
+}
+.blocked-image-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+  display: block;
+}
+.blocked-image-text {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.blocked-image-source {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Gmail-style spacing */
+.gmail-content {
+  padding: 20px 0;
+}
+
+/* Remove double <br> gaps */
+br + br {
+  display: none;
+}
+
+/* Responsive tweaks */
+@media (max-width: 480px) {
+  body { font-size: 13px; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 18px; }
+  table { font-size: 12px; }
+  td, th { padding: 6px 8px; }
+  pre, code { font-size: 12px; }
+}
+
+/* ===== GMAIL EMAIL RESET RULES ===== */
+/* 1. Strip every border */
+table, td, th {
+  border: none !important;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+table[border] { 
+  border: none !important; 
+}
+
+/* 2. Enforce fluid widths */
+table { 
+  width: auto !important; 
+  max-width: 100% !important; 
+  table-layout: auto !important; 
+}
+img {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+}
+
+/* 3. Remove extra gutters on wrappers */
+.gmail-content,
+.gmail-content table,
+.wrapper, .container, .email-wrapper {
+  padding: 0 !important;
+  margin: 0 auto !important;
+  width: auto !important;
+  max-width: 100% !important;
+}
+
+/* Additional email-specific resets */
+*[style*="border"] {
+  border: none !important;
+}
+*[style*="padding"] {
+  padding: 0 !important;
+}
+*[style*="margin"] {
+  margin: 0 !important;
+}
+*[style*="width: 600px"],
+*[style*="width: 650px"],
+*[style*="width: 700px"] {
+  width: auto !important;
+  max-width: 100% !important;
+}
+`;
+
+// JS snippet injected to measure content height
+const MEASURE_JS = `
+(function() {
+  function sendHeight() {
+    const h = Math.max(
+      document.body.scrollHeight,
+      document.documentElement.scrollHeight
+    );
+    window.ReactNativeWebView.postMessage(h);
+  }
+  window.addEventListener('load', sendHeight);
+  setTimeout(sendHeight, 500);
+})();
+true;
+`;
+
+interface EmailRendererProps {
+  html: string; // raw email HTML (body/content)
+}
+
+export default function EmailRenderer({ html }: EmailRendererProps) {
+  const [height, setHeight] = useState(0);
+  const webviewRef = useRef<WebView>(null);
+
+  // Debug log to confirm new code is running
+  console.log('🎯 NEW EmailRenderer loaded! HTML length:', html?.length || 0);
+
+  // Strip out any existing <style> blocks in the raw HTML
+  const sanitized = html.replace(/<style[\s\S]*?<\/style>/gi, '');
+
+  // Wrap in a minimal document + our Gmail CSS
+  const wrappedHTML = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>${GMAIL_CSS}</style>
+      </head>
+      <body>
+        <div class="gmail-content">
+          ${sanitized}
+        </div>
+      </body>
+    </html>
   `;
 
-  // Native rendering styles (Gmail-like)
-  const nativeTagsStyles = {
-    body: {
-      margin: 0,
-      padding: 0,
-      backgroundColor: isDarkMode ? '#202124' : '#ffffff',
-      width: '100%',
-    },
-    p: {
-      marginTop: 0,
-      marginBottom: 16,
-      fontSize: 14,
-      lineHeight: 20,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontFamily: 'System',
-    },
-    div: {
-      fontSize: 14,
-      lineHeight: 20,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontFamily: 'System',
-      marginBottom: 8,
-      borderWidth: 0,
-      borderColor: 'transparent',
-      backgroundColor: 'transparent',
-    },
-    img: {
-      maxWidth: '100%',
-      height: 'auto',
-      marginTop: 8,
-      marginBottom: 8,
-      borderRadius: 4,
-    },
-    span: {
-      fontSize: 14,
-      lineHeight: 20,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontFamily: 'System',
-    },
-    a: {
-      color: isDarkMode ? '#8ab4f8' : '#1a73e8',
-      textDecorationLine: 'none' as const,
-      fontSize: 14,
-      lineHeight: 20,
-    },
-    h1: {
-      fontSize: 24,
-      fontWeight: '400' as const,
-      lineHeight: 32,
-      marginTop: 0,
-      marginBottom: 16,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontFamily: 'System',
-    },
-    h2: {
-      fontSize: 20,
-      fontWeight: '400' as const,
-      lineHeight: 28,
-      marginTop: 0,
-      marginBottom: 14,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontFamily: 'System',
-    },
-    h3: {
-      fontSize: 16,
-      fontWeight: '500' as const,
-      lineHeight: 24,
-      marginTop: 0,
-      marginBottom: 12,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontFamily: 'System',
-    },
-    strong: {
-      fontWeight: '500' as const,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontSize: 14,
-      lineHeight: 20,
-    },
-    b: {
-      fontWeight: '500' as const,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontSize: 14,
-      lineHeight: 20,
-    },
-    em: {
-      fontStyle: 'italic' as const,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontSize: 14,
-      lineHeight: 20,
-    },
-    i: {
-      fontStyle: 'italic' as const,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontSize: 14,
-      lineHeight: 20,
-    },
-    ul: {
-      marginTop: 0,
-      marginBottom: 16,
-      paddingLeft: 24,
-    },
-    ol: {
-      marginTop: 0,
-      marginBottom: 16,
-      paddingLeft: 24,
-    },
-    li: {
-      marginBottom: 4,
-      fontSize: 14,
-      lineHeight: 20,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-      fontFamily: 'System',
-    },
-    blockquote: {
-      borderLeftWidth: 4,
-      borderLeftColor: isDarkMode ? '#5f6368' : '#dadce0',
-      marginTop: 16,
-      marginBottom: 16,
-      paddingLeft: 16,
-      color: isDarkMode ? '#9aa0a6' : '#5f6368',
-      fontStyle: 'italic' as const,
-      fontSize: 14,
-      lineHeight: 20,
-    },
-    table: {
-      width: '100%',
-      marginTop: 16,
-      marginBottom: 16,
-      fontSize: 14,
-    },
-    td: {
-      padding: 8,
-      borderWidth: 1,
-      borderColor: isDarkMode ? '#5f6368' : '#dadce0',
-      fontSize: 14,
-      lineHeight: 20,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-    },
-    th: {
-      padding: 8,
-      borderWidth: 1,
-      borderColor: isDarkMode ? '#5f6368' : '#dadce0',
-      backgroundColor: isDarkMode ? '#3c4043' : '#f8f9fa',
-      fontWeight: '500' as const,
-      fontSize: 14,
-      lineHeight: 20,
-      color: isDarkMode ? '#e8eaed' : '#3c4043',
-    },
-  };
-
-  const handleLinkPress = (url: string) => {
-    if (onLinkPress) {
-      onLinkPress(url);
-    } else {
-      Linking.openURL(url);
-    }
-  };
-
-
-
-
-
-  // Render with WebView for complex emails
-  if (shouldUseWebView) {
-    const webViewHTML = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-          <style>${webViewCSS}</style>
-        </head>
-        <body>
-          <div class="email-container">
-            <div class="email-content">
-              ${html}
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    return (
-      <>
-        <View style={[styles.containerWebView, style]}>
-          <WebView
-            originWhitelist={['*']}
-            source={{ html: webViewHTML }}
-            style={[styles.webView, { height: webViewHeight }]}
-            onMessage={(event) => {
-              const height = parseInt(event.nativeEvent.data, 10);
-              if (!isNaN(height) && height > 0) {
-                console.log('Setting WebView height to:', height);
-                setWebViewHeight(Math.max(height + 20, 200));
-              }
-            }}
-            scrollEnabled={true}
-            nestedScrollEnabled={true}
-            showsVerticalScrollIndicator={true}
-            showsHorizontalScrollIndicator={false}
-            scalesPageToFit={true}
-            onShouldStartLoadWithRequest={(event) => {
-              if (event.url.startsWith('http')) {
-                handleLinkPress(event.url);
-                return false;
-              }
-              return true;
-            }}
-            onError={(error) => {
-              console.error('WebView error:', error);
-              // Fallback to native rendering on error
-              setRenderMethod('native');
-            }}
-            onLoadEnd={() => {
-              console.log('WebView loaded successfully');
-            }}
-
-            injectedJavaScript={`
-              // A) Hide any truly empty preheader wrappers (their parent table)
-              document.querySelectorAll('.stylingblock-content-wrapper.camarker-inner')
-                .forEach(el => {
-                  if (!el.textContent.trim()) {
-                    const parent = el.closest('.stylingblock-content-wrapper');
-                    if (parent) parent.style.display = 'none';
-                  }
-                });
-
-              // B) Force .hide cells back on‐screen
-              document.querySelectorAll('.hide').forEach(el => {
-                el.style.display = 'table-cell';
-                el.style.visibility = 'visible';
-                el.style.opacity = '1';
-              });
-
-              // C) Re‐stack the header cells
-              document.querySelectorAll('.responsive-td, .displayBlock.text-center, .text-center.paddingBottom10')
-                .forEach(td => {
-                  td.style.display = 'block';
-                  td.style.width   = '100%';
-                  td.style.textAlign = 'center';
-                });
-
-              // D) Make the main wrapper take full width
-              const wrapper = document.querySelector('.fullgmail');
-              if (wrapper) {
-                wrapper.style.margin = '0';
-                wrapper.style.width = '100%';
-                wrapper.style.maxWidth = 'none';
-                wrapper.style.display = 'block';
-              }
-
-              // E) ensure all elements take full width
-              document.querySelectorAll('table, div, section, article').forEach(el => {
-                el.style.width = '100%';
-                el.style.maxWidth = 'none';
-                el.style.margin = '0';
-              });
-
-              // F) Measure content height and send to React Native
-              function measureHeight() {
-                const height = Math.max(
-                  document.documentElement.scrollHeight,
-                  document.body.scrollHeight
-                );
-                window.ReactNativeWebView.postMessage(height.toString());
-              }
-              setTimeout(measureHeight, 100);
-              setTimeout(measureHeight, 500);
-              setTimeout(measureHeight, 1000);
-
-              true;
-            `}
-          />
-        </View>
-
-      </>
-    );
-  }
-
-    // Render with native HTML renderer (preserve original styles)
-  const cleanHtml = html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove script blocks for security
-    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '') // Remove head blocks
-    .trim();
-
   return (
-    <>
-      <View style={[styles.container, style]}>
-        <RenderHtml
-          contentWidth={width - 32}
-          source={{ html: cleanHtml }}
-          ignoredDomTags={['script', 'meta', 'head', 'title', 'html', 'body', 'style']}
-          onHTMLLoaded={(error: any) => {
-            if (error) {
-              console.error('RenderHtml error:', error);
-              // Fallback to WebView on error
-              setRenderMethod('webview');
-            }
-          }}
-          renderersProps={{
-            img: {
-              enableExperimentalPercentWidth: true,
-            },
-            a: {
-              onPress: (event: any, url: string) => handleLinkPress(url),
-            },
-          }}
-          defaultViewProps={{
-            style: {
-              backgroundColor: 'transparent',
-            },
-          }}
-          baseStyle={{
-            fontSize: 14,
-            lineHeight: 20,
-            color: isDarkMode ? '#e8eaed' : '#3c4043',
-            fontFamily: 'System',
-            backgroundColor: 'transparent',
-          }}
-          tagsStyles={nativeTagsStyles}
-          systemFonts={['System']}
-        />
-      </View>
-
-    </>
+    <View style={styles.container}>
+      {height === 0 && (
+        <ActivityIndicator style={StyleSheet.absoluteFill} size="large" />
+      )}
+      <WebView
+        ref={webviewRef}
+        originWhitelist={["*"]}
+        source={{ html: wrappedHTML }}
+        style={[styles.webview, { height }]}
+        injectedJavaScript={MEASURE_JS}
+        onMessage={e => {
+          const h = parseInt(e.nativeEvent.data, 10);
+          if (!isNaN(h) && h > 0) setHeight(h);
+        }}
+        javaScriptEnabled
+        domStorageEnabled
+        scrollEnabled={false}
+        automaticallyAdjustContentInsets={false}
+      />
+    </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    width: '100%',
+    backgroundColor: '#fff',
   },
-  containerWebView: {
-    flex: 1,
-  },
-  webView: {
-    flex: 1,
-    backgroundColor: 'transparent',
+  webview: {
+    width: SCREEN_WIDTH - 20,
+    marginHorizontal: 10,
+    backgroundColor: '#fff',
   },
 });
-
-export default EmailRenderer; 
