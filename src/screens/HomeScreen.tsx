@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,12 @@ import {
   ScrollView,
   Animated,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Speech from 'expo-speech';
+import { Audio } from 'expo-av';
+
 import { useNavigation } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import { emailService, EmailThread, EmailLabel, EmailCategory, EmailCategoryInfo, EmailFilter, SYSTEM_LABELS } from '../services/emailService';
@@ -37,6 +41,11 @@ const HomeScreen = () => {
   const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [showSidePanel, setShowSidePanel] = useState(false);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [summaryText, setSummaryText] = useState('');
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechRate, setSpeechRate] = useState(0.8);
   const slideAnim = useState(new Animated.Value(-300))[0];
 
   if (!authContext) {
@@ -44,6 +53,22 @@ const HomeScreen = () => {
   }
 
   const { user, token, logout } = authContext;
+
+  // Cleanup speech when modal closes
+  useEffect(() => {
+    if (!showSummaryModal && isSpeaking) {
+      stopSpeaking();
+    }
+  }, [showSummaryModal]);
+
+  // Cleanup speech on unmount
+  useEffect(() => {
+    return () => {
+      if (isSpeaking) {
+        stopSpeaking();
+      }
+    };
+  }, []);
 
   // Apply filters and categorization to threads
   const applyFiltersAndCategorization = (threadsToProcess: EmailThread[]) => {
@@ -312,10 +337,269 @@ const HomeScreen = () => {
   };
 
   const handleVoiceCommand = () => {
+    // For now, trigger both classification and summary
+    classifyEmailsForReply();
+    generateInboxSummary();
+    
+    // TODO: Add voice recognition later
+    // showMessage({
+    //   message: 'Voice commands coming soon!',
+    //   type: 'info',
+    // });
+  };
+
+  // Test function to manually add badges for debugging
+  const testBadges = () => {
+    setOriginalThreads(prev => {
+      const updated = prev.map((thread, index) => {
+        // Add test badges to first few emails
+        if (index === 0) {
+          return { ...thread, needsReply: true, isImportant: false };
+        } else if (index === 1) {
+          return { ...thread, needsReply: false, isImportant: true };
+        } else if (index === 2) {
+          return { ...thread, needsReply: true, isImportant: true };
+        }
+        return thread;
+      });
+      return updated;
+    });
+    
     showMessage({
-      message: 'Voice commands coming soon!',
+      message: 'Test badges added! Check first 3 emails',
       type: 'info',
     });
+  };
+
+  // Generate and display inbox summary
+  const generateInboxSummary = async () => {
+    if (!token) return;
+    
+    setIsGeneratingSummary(true);
+    setShowSummaryModal(true);
+    
+    try {
+      const summary = await emailService.generateInboxSummary(token);
+      setSummaryText(summary);
+      
+      // Auto-speak the summary
+      speakSummary(summary);
+    } catch (error) {
+      console.error('Error generating summary:', error);
+      setSummaryText('Sorry, I had trouble analyzing your inbox. Please try again.');
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
+  // Speak the summary using text-to-speech
+  const speakSummary = (text: string) => {
+    console.log('Speech function called with text:', text.substring(0, 50) + '...');
+    console.log('Current speech state:', { isSpeaking, speechRate });
+    
+    if (isSpeaking) {
+      console.log('Stopping current speech...');
+      Speech.stop();
+      setIsSpeaking(false);
+      return;
+    }
+
+    setIsSpeaking(true);
+    console.log('Starting speech with rate:', speechRate);
+    
+    Speech.speak(text, {
+      language: 'en-US',
+      pitch: 1.0,
+      rate: speechRate,
+      onDone: () => {
+        console.log('Speech completed successfully');
+        setIsSpeaking(false);
+      },
+      onError: (error) => {
+        console.error('Speech error:', error);
+        setIsSpeaking(false);
+        showMessage({
+          message: 'Sorry, I had trouble speaking. Please try again.',
+          type: 'danger',
+        });
+      },
+      onStart: () => {
+        console.log('Speech started successfully');
+      },
+      onStopped: () => {
+        console.log('Speech was stopped');
+        setIsSpeaking(false);
+      },
+    });
+  };
+
+  // Test basic audio (not speech)
+  const testBasicAudio = async () => {
+    try {
+      console.log('Testing basic audio...');
+      
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav' },
+        { shouldPlay: true }
+      );
+      
+      await sound.playAsync();
+      
+      showMessage({
+        message: 'Playing test sound - do you hear it?',
+        type: 'info',
+      });
+      
+      // Clean up after 3 seconds
+      setTimeout(async () => {
+        await sound.unloadAsync();
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Audio test error:', error);
+      showMessage({
+        message: 'Audio test failed - try on a physical device',
+        type: 'danger',
+      });
+    }
+  };
+
+  // Show speech troubleshooting tips
+  const showSpeechTips = () => {
+    Alert.alert(
+      'Speech Not Working?',
+      'Try these steps:\n\n1. Turn up your device volume\n2. Make sure you\'re not on silent mode\n3. Try on a physical device (not simulator)\n4. Check if other apps can play audio\n5. Restart the app if needed',
+      [
+        { text: 'OK', style: 'default' },
+        { text: 'Test Speech', onPress: testSpeech },
+      ]
+    );
+  };
+
+  // Test speech with a simple phrase
+  const testSpeech = () => {
+    console.log('Testing speech...');
+    
+    // Try different speech configurations
+    const testConfigs = [
+      { language: 'en-US', pitch: 1.0, rate: 0.8 },
+      { language: 'en', pitch: 1.0, rate: 1.0 },
+      { language: 'en-US', pitch: 1.2, rate: 0.6 },
+    ];
+    
+    let configIndex = 0;
+    
+    const tryNextConfig = () => {
+      if (configIndex >= testConfigs.length) {
+        showMessage({
+          message: 'Speech test failed. Check device volume and try again.',
+          type: 'danger',
+        });
+        return;
+      }
+      
+      const config = testConfigs[configIndex];
+      console.log(`Trying speech config ${configIndex + 1}:`, config);
+      
+      Speech.speak(`Test ${configIndex + 1}: Hello, this is Dixie speaking.`, {
+        ...config,
+        onDone: () => {
+          console.log(`Test ${configIndex + 1} completed`);
+          showMessage({
+            message: `Speech test ${configIndex + 1} completed - did you hear it?`,
+            type: 'success',
+          });
+        },
+        onError: (error: any) => {
+          console.error(`Test ${configIndex + 1} error:`, error);
+          configIndex++;
+          setTimeout(tryNextConfig, 500);
+        },
+        onStart: () => {
+          console.log(`Test ${configIndex + 1} started`);
+          showMessage({
+            message: `Speech test ${configIndex + 1} started - check your volume!`,
+            type: 'info',
+          });
+        },
+      });
+    };
+    
+    tryNextConfig();
+  };
+
+  // Stop speaking
+  const stopSpeaking = () => {
+    Speech.stop();
+    setIsSpeaking(false);
+  };
+
+  // Adjust speech rate
+  const adjustSpeechRate = () => {
+    const rates = [0.6, 0.8, 1.0, 1.2, 1.4];
+    const currentIndex = rates.indexOf(speechRate);
+    const nextIndex = (currentIndex + 1) % rates.length;
+    setSpeechRate(rates[nextIndex]);
+    
+    showMessage({
+      message: `Speech speed: ${rates[nextIndex]}x`,
+      type: 'info',
+      duration: 1500,
+    });
+  };
+
+  const classifyEmailsForReply = async () => {
+    if (!token || originalThreads.length === 0) return;
+    
+    try {
+      // Get thread IDs for classification (process all threads)
+      const threadIds = originalThreads.map(thread => thread.id);
+      
+      console.log(`Classifying ${threadIds.length} threads for needs reply and important updates...`);
+      
+      const classifications = await emailService.classifyEmails(token, threadIds);
+      
+      console.log('Classification results:', classifications);
+      
+      // Update threads with classification results
+      setOriginalThreads(prev => {
+        const updated = prev.map(thread => {
+          const classification = classifications.find(c => c.threadId === thread.id);
+          const updatedThread = {
+            ...thread,
+            needsReply: classification?.needsReply || false,
+            isImportant: classification?.isImportant || false,
+          };
+          
+          // Debug log for threads with badges
+          if (updatedThread.needsReply || updatedThread.isImportant) {
+            console.log(`Thread ${thread.id} (${thread.subject}): needsReply=${updatedThread.needsReply}, isImportant=${updatedThread.isImportant}`);
+          }
+          
+          return updatedThread;
+        });
+        return updated;
+      });
+      
+      // Count how many need replies and how many are important
+      const needsReplyCount = classifications.filter(c => c.needsReply).length;
+      const importantCount = classifications.filter(c => c.isImportant).length;
+      
+      console.log(`Classification complete: ${needsReplyCount} need replies, ${importantCount} are important`);
+      
+      showMessage({
+        message: `Analyzed ${threadIds.length} emails - ${needsReplyCount} need replies, ${importantCount} are important`,
+        type: 'info',
+        duration: 4000,
+      });
+      
+    } catch (error) {
+      console.error('Error classifying emails:', error);
+      showMessage({
+        message: 'Failed to analyze emails',
+        type: 'danger',
+      });
+    }
   };
 
   // Helper: format time/date like Gmail
@@ -379,6 +663,18 @@ const HomeScreen = () => {
         </Text>
         <View style={styles.threadFooter}>
           <View style={styles.threadLabels}>
+            {item.needsReply && (
+              <View style={styles.needsReplyBadge}>
+                <Ionicons name="chatbubble-ellipses" size={12} color="#fff" />
+                <Text style={styles.needsReplyText}>Reply</Text>
+              </View>
+            )}
+            {item.isImportant && (
+              <View style={styles.importantBadge}>
+                <Ionicons name="alert-circle" size={12} color="#fff" />
+                <Text style={styles.importantBadgeText}>Important</Text>
+              </View>
+            )}
             {item.labels && item.labels.slice(0, 3).map((labelId) => {
               const label = labels.find(l => l.id === labelId);
               return label ? (
@@ -443,6 +739,21 @@ const HomeScreen = () => {
           />
           <TouchableOpacity onPress={handleVoiceCommand} style={styles.voiceButton}>
             <Ionicons name="mic" size={20} color="#4285F4" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={testBadges} style={styles.testButton}>
+            <Ionicons name="bug" size={20} color="#FF6D01" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={generateInboxSummary} style={styles.summaryButton}>
+            <Ionicons name="analytics" size={20} color="#34A853" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={testSpeech} style={styles.testButton}>
+            <Ionicons name="volume-high" size={20} color="#9C27B0" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={showSpeechTips} style={styles.testButton}>
+            <Ionicons name="help-circle" size={20} color="#607D8B" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={testBasicAudio} style={styles.testButton}>
+            <Ionicons name="musical-notes" size={20} color="#FF5722" />
           </TouchableOpacity>
         </View>
 
@@ -544,6 +855,69 @@ const HomeScreen = () => {
                 </ScrollView>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Inbox Summary Modal */}
+      <Modal
+        visible={showSummaryModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSummaryModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={styles.summaryHeader}>
+                <Ionicons name="chatbubble-ellipses" size={24} color="#4285F4" />
+                <Text style={styles.modalTitle}>Dixie's Inbox Summary</Text>
+              </View>
+              <View style={styles.summaryControls}>
+                {!isGeneratingSummary && summaryText && (
+                  <>
+                    <TouchableOpacity 
+                      onPress={() => speakSummary(summaryText)}
+                      style={styles.speechButton}
+                    >
+                      <Ionicons 
+                        name={isSpeaking ? "pause" : "volume-high"} 
+                        size={20} 
+                        color={isSpeaking ? "#FF6D01" : "#4285F4"} 
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      onPress={adjustSpeechRate}
+                      style={styles.speedButton}
+                    >
+                      <Text style={styles.speedText}>{speechRate}x</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                <TouchableOpacity onPress={() => setShowSummaryModal(false)}>
+                  <Ionicons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <View style={styles.modalBody}>
+              {isGeneratingSummary ? (
+                <View style={styles.summaryLoading}>
+                  <ActivityIndicator size="large" color="#4285F4" />
+                  <Text style={styles.summaryLoadingText}>Dixie is analyzing your inbox...</Text>
+                </View>
+              ) : (
+                <ScrollView style={styles.summaryContent}>
+                  {isSpeaking && (
+                    <View style={styles.speakingIndicator}>
+                      <Ionicons name="volume-high" size={16} color="#4285F4" />
+                      <Text style={styles.speakingText}>Dixie is speaking...</Text>
+                    </View>
+                  )}
+                  <Text style={styles.summaryText}>{summaryText}</Text>
+                </ScrollView>
+              )}
+            </View>
           </View>
         </View>
       </Modal>
@@ -720,6 +1094,12 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   voiceButton: {
+    padding: 5,
+  },
+  testButton: {
+    padding: 5,
+  },
+  summaryButton: {
     padding: 5,
   },
   content: {
@@ -940,6 +1320,36 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontStyle: 'italic',
   },
+  needsReplyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EA4335', // Red color for reply indicator
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  needsReplyText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  importantBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF6D01', // A distinct color for important
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  importantBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
   // Modal styles
   modalOverlay: {
     flex: 1,
@@ -1138,6 +1548,65 @@ const styles = StyleSheet.create({
   clearFiltersContainer: {
     paddingHorizontal: 16,
     paddingBottom: 15,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  summaryLoading: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  summaryLoadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  summaryContent: {
+    maxHeight: 400,
+  },
+  summaryText: {
+    fontSize: 16,
+    color: '#333',
+    lineHeight: 24,
+    textAlign: 'left',
+  },
+  summaryControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  speechButton: {
+    padding: 5,
+  },
+  speedButton: {
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e1e5e9',
+  },
+  speedText: {
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '500',
+  },
+  speakingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    paddingVertical: 10,
+    backgroundColor: '#e8f0fe',
+    borderRadius: 8,
+  },
+  speakingText: {
+    fontSize: 14,
+    color: '#4285F4',
+    marginLeft: 5,
   },
 });
 

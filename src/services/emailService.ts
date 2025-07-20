@@ -31,6 +31,8 @@ export interface EmailThread {
   labels?: string[]; // Array of label IDs
   starred?: boolean;
   important?: boolean;
+  needsReply?: boolean; // AI classification flag
+  isImportant?: boolean; // AI classification flag for important updates
 }
 
 export interface EmailMessage {
@@ -44,6 +46,12 @@ export interface EmailMessage {
   hasBlockedImages?: boolean;
   snippet: string;
   labels?: string[]; // Array of label IDs
+  attachments?: Array<{
+    id: string;
+    name: string;
+    mimeType: string;
+    size: number;
+  }>;
 }
 
 export interface DetailedEmailThread {
@@ -226,6 +234,11 @@ export const emailService = {
     subject: string;
     body: string;
     threadId?: string;
+    attachments?: Array<{
+      name: string;
+      data: string; // base64 encoded data
+      mimeType: string;
+    }>;
   }): Promise<void> {
     try {
       const baseURL = await getBaseURL();
@@ -444,7 +457,6 @@ export const emailService = {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
         },
       }, API_CONFIG.TIMEOUT);
 
@@ -453,6 +465,85 @@ export const emailService = {
       }
     } catch (error) {
       console.error('Error marking thread as read:', error);
+      throw error;
+    }
+  },
+
+  async getAttachment(token: string, messageId: string, attachmentId: string): Promise<{ data: string; size: number }> {
+    try {
+      const baseURL = await getBaseURL();
+      const response = await fetchWithTimeout(`${baseURL}/api/email/messages/${messageId}/attachments/${attachmentId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      }, API_CONFIG.TIMEOUT);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching attachment:', error);
+      throw error;
+    }
+  },
+
+  async generateInboxSummary(token: string): Promise<string> {
+    try {
+      const baseURL = await getBaseURL();
+      const response = await retryFetch(() =>
+        fetchWithTimeout(`${baseURL}/api/email/summary`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }, API_CONFIG.TIMEOUT)
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Authentication failed. Please log in again.');
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.summary || 'Unable to generate summary';
+    } catch (error) {
+      console.error('Error generating inbox summary:', error);
+      throw error;
+    }
+  },
+
+  async classifyEmails(token: string, threadIds: string[]): Promise<Array<{
+    threadId: string;
+    needsReply: boolean;
+    isImportant: boolean;
+    confidence: number;
+  }>> {
+    try {
+      const baseURL = await getBaseURL();
+      const response = await fetchWithTimeout(`${baseURL}/api/email/classify`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ threadIds }),
+      }, API_CONFIG.TIMEOUT);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.classifications || [];
+    } catch (error) {
+      console.error('Error classifying emails:', error);
       throw error;
     }
   },

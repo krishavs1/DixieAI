@@ -11,11 +11,22 @@ import {
   ScrollView,
   Alert,
   Modal,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { AuthContext } from '../context/AuthContext';
 import { emailService } from '../services/emailService';
 import { useNavigation } from '@react-navigation/native';
+
+interface Attachment {
+  id: string;
+  name: string;
+  uri: string;
+  type: 'image' | 'document';
+  size?: number;
+}
 
 const ComposeScreen = ({ route }: any) => {
   const [to, setTo] = useState('');
@@ -23,6 +34,7 @@ const ComposeScreen = ({ route }: any) => {
   const [body, setBody] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   
   const { token } = useContext(AuthContext)!;
   const navigation = useNavigation();
@@ -35,6 +47,126 @@ const ComposeScreen = ({ route }: any) => {
       setBody(forwardData.body || '');
     }
   }, [route.params]);
+
+  const requestPermissions = async () => {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const requestCameraPermissions = async () => {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Sorry, we need camera permissions to make this work!');
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handlePhotoPicker = async () => {
+    setShowAttachmentMenu(false);
+    
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const newAttachment: Attachment = {
+          id: Date.now().toString(),
+          name: asset.fileName || `photo_${Date.now()}.jpg`,
+          uri: asset.uri,
+          type: 'image',
+          size: asset.fileSize,
+        };
+        setAttachments(prev => [...prev, newAttachment]);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  const handleCamera = async () => {
+    setShowAttachmentMenu(false);
+    
+    const hasPermission = await requestCameraPermissions();
+    if (!hasPermission) return;
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const newAttachment: Attachment = {
+          id: Date.now().toString(),
+          name: `camera_${Date.now()}.jpg`,
+          uri: asset.uri,
+          type: 'image',
+          size: asset.fileSize,
+        };
+        setAttachments(prev => [...prev, newAttachment]);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const handleFilePicker = async () => {
+    setShowAttachmentMenu(false);
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const newAttachment: Attachment = {
+          id: Date.now().toString(),
+          name: asset.name,
+          uri: asset.uri,
+          type: 'document',
+          size: asset.size,
+        };
+        setAttachments(prev => [...prev, newAttachment]);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document. Please try again.');
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(attachment => attachment.id !== id));
+  };
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '';
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  };
 
   const handleSend = async () => {
     if (!to.trim() || !subject.trim() || !body.trim()) {
@@ -56,13 +188,68 @@ const ComposeScreen = ({ route }: any) => {
 
     setIsSending(true);
     try {
+      // Convert attachments to base64 if they exist
+      const emailAttachments = attachments.length > 0 ? await Promise.all(
+        attachments.map(async (attachment) => {
+          try {
+            // For images, we need to read the file and convert to base64
+            if (attachment.type === 'image') {
+              const response = await fetch(attachment.uri);
+              const blob = await response.blob();
+              return new Promise<{ name: string; data: string; mimeType: string }>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const base64 = reader.result as string;
+                  // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
+                  const base64Data = base64.split(',')[1];
+                  resolve({
+                    name: attachment.name,
+                    data: base64Data,
+                    mimeType: 'image/jpeg', // Default to JPEG, could be enhanced to detect actual type
+                  });
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+            } else {
+              // For documents, we need to read the file
+              const response = await fetch(attachment.uri);
+              const blob = await response.blob();
+              return new Promise<{ name: string; data: string; mimeType: string }>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const base64 = reader.result as string;
+                  const base64Data = base64.split(',')[1];
+                  resolve({
+                    name: attachment.name,
+                    data: base64Data,
+                    mimeType: blob.type || 'application/octet-stream',
+                  });
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+            }
+          } catch (error) {
+            console.error('Error processing attachment:', error);
+            throw new Error(`Failed to process attachment: ${attachment.name}`);
+          }
+        })
+      ) : undefined;
+
+      // Send email with attachments
       await emailService.sendEmail(token, {
         to: to.trim(),
         subject: subject.trim(),
         body: body.trim(),
+        attachments: emailAttachments,
       });
       
-      Alert.alert('Success', 'Email sent successfully!', [
+      const attachmentMessage = attachments.length > 0 
+        ? `\n\nEmail sent successfully with ${attachments.length} attachment(s)!`
+        : '\n\nEmail sent successfully!';
+      
+      Alert.alert('Success', `Email sent successfully!${attachmentMessage}`, [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
     } catch (error: any) {
@@ -91,8 +278,17 @@ const ComposeScreen = ({ route }: any) => {
 
   const handleAttachment = (type: string) => {
     setShowAttachmentMenu(false);
-    // TODO: Implement attachment functionality
-    Alert.alert('Coming Soon', `${type} attachment functionality will be implemented soon!`);
+    switch (type) {
+      case 'Photo':
+        handlePhotoPicker();
+        break;
+      case 'Camera':
+        handleCamera();
+        break;
+      case 'File':
+        handleFilePicker();
+        break;
+    }
   };
 
   return (
@@ -172,6 +368,40 @@ const ComposeScreen = ({ route }: any) => {
               autoCapitalize="sentences"
             />
           </View>
+
+          {/* Attachments */}
+          {attachments.length > 0 && (
+            <View style={styles.attachmentsContainer}>
+              <Text style={styles.attachmentsTitle}>Attachments ({attachments.length})</Text>
+              {attachments.map((attachment) => (
+                <View key={attachment.id} style={styles.attachmentItem}>
+                  {attachment.type === 'image' ? (
+                    <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
+                  ) : (
+                    <View style={styles.attachmentIcon}>
+                      <Ionicons name="document" size={24} color="#666" />
+                    </View>
+                  )}
+                  <View style={styles.attachmentInfo}>
+                    <Text style={styles.attachmentName} numberOfLines={1}>
+                      {attachment.name}
+                    </Text>
+                    {attachment.size && (
+                      <Text style={styles.attachmentSize}>
+                        {formatFileSize(attachment.size)}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => removeAttachment(attachment.id)}
+                    style={styles.removeAttachmentButton}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#ff4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
         </ScrollView>
 
         {/* Attachment Menu Modal */}
@@ -319,6 +549,60 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 16,
     color: '#333',
+  },
+  attachmentsContainer: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  attachmentsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 5,
+  },
+  attachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 5,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  attachmentImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  attachmentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 4,
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  attachmentInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  attachmentName: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  attachmentSize: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  removeAttachmentButton: {
+    padding: 5,
   },
 });
 

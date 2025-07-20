@@ -13,6 +13,7 @@ import {
   Platform,
   useWindowDimensions,
   useColorScheme,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -42,6 +43,7 @@ const EmailDetailScreen = () => {
   const [isSending, setIsSending] = useState(false);
 
   const [expandedMessages, setExpandedMessages] = useState<{[key: string]: boolean}>({});
+  const [attachmentData, setAttachmentData] = useState<{[key: string]: { [attachmentId: string]: string }}>({});
   
   const isDarkMode = colorScheme === 'dark';
 
@@ -117,6 +119,71 @@ const EmailDetailScreen = () => {
     } else {
       return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const fetchAttachmentData = async (messageId: string, attachmentId: string) => {
+    try {
+      const attachment = await emailService.getAttachment(token, messageId, attachmentId);
+      setAttachmentData(prev => ({
+        ...prev,
+        [messageId]: {
+          ...prev[messageId],
+          [attachmentId]: `data:application/octet-stream;base64,${attachment.data}`,
+        },
+      }));
+    } catch (error) {
+      console.error('Error fetching attachment:', error);
+    }
+  };
+
+  const renderAttachments = (message: EmailMessage) => {
+    if (!message.attachments || message.attachments.length === 0) {
+      return null;
+    }
+
+    return (
+      <View style={styles.attachmentsContainer}>
+        <Text style={[styles.attachmentsTitle, isDarkMode && styles.attachmentsTitleDark]}>
+          Attachments ({message.attachments.length})
+        </Text>
+        {message.attachments.map((attachment) => {
+          const attachmentUrl = attachmentData[message.id]?.[attachment.id];
+          const isImage = attachment.mimeType.startsWith('image/');
+          
+          return (
+            <View key={attachment.id} style={styles.attachmentItem}>
+              {isImage && attachmentUrl ? (
+                <Image source={{ uri: attachmentUrl }} style={styles.attachmentImage} />
+              ) : (
+                <View style={styles.attachmentIcon}>
+                  <Ionicons name="document" size={24} color={isDarkMode ? '#9aa0a6' : '#666'} />
+                </View>
+              )}
+              <View style={styles.attachmentInfo}>
+                <Text style={[styles.attachmentName, isDarkMode && styles.attachmentNameDark]} numberOfLines={1}>
+                  {attachment.name}
+                </Text>
+                <Text style={[styles.attachmentSize, isDarkMode && styles.attachmentSizeDark]}>
+                  {formatFileSize(attachment.size)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => fetchAttachmentData(message.id, attachment.id)}
+                style={styles.downloadButton}
+              >
+                <Ionicons name="download" size={20} color={isDarkMode ? '#8ab4f8' : '#1a73e8'} />
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+      </View>
+    );
   };
 
   const stripHtmlTags = (html: string) => {
@@ -342,6 +409,7 @@ const EmailDetailScreen = () => {
                       </Text>
                     )}
                   </View>
+                  {renderAttachments(message)}
                 </View>
               )}
             </View>
@@ -616,6 +684,79 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '500',
+  },
+  attachmentsContainer: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E8EAED',
+  },
+  attachmentsTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#3c4043',
+    marginBottom: 8,
+  },
+  attachmentsTitleDark: {
+    color: '#e8eaed',
+  },
+  attachmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  attachmentItemDark: {
+    backgroundColor: '#202124',
+    shadowColor: '#000',
+  },
+  attachmentImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  attachmentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#E8EAED',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  attachmentIconDark: {
+    backgroundColor: '#5f6368',
+  },
+  attachmentInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  attachmentName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#3c4043',
+  },
+  attachmentNameDark: {
+    color: '#e8eaed',
+  },
+  attachmentSize: {
+    fontSize: 12,
+    color: '#5f6368',
+  },
+  attachmentSizeDark: {
+    color: '#9aa0a6',
+  },
+  downloadButton: {
+    padding: 8,
   },
 });
 

@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import { authMiddleware } from '../middleware/auth';
 import { z } from 'zod';
 import { processEmailHtml, extractEmailBody, findInlineImages, processInlineImages } from '../utils/emailProcessor';
+import { AIService, EmailContent } from '../services/aiService';
 import * as he from 'he';
 
 interface AuthRequest extends express.Request {
@@ -28,6 +29,11 @@ const sendEmailSchema = z.object({
   subject: z.string(),
   body: z.string(),
   threadId: z.string().optional(),
+  attachments: z.array(z.object({
+    name: z.string(),
+    data: z.string(), // base64 encoded data
+    mimeType: z.string(),
+  })).optional(),
 });
 
 // Get all threads
@@ -274,6 +280,35 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
         // Process the HTML content with inline images
         let processedBody = processInlineImages(rawBody, attachmentMap);
         
+        // Extract attachments from the message
+        const attachments: Array<{
+          id: string;
+          name: string;
+          mimeType: string;
+          size: number;
+        }> = [];
+        
+        const extractAttachments = (payload: any): void => {
+          if (payload.parts) {
+            for (const part of payload.parts) {
+              if (part.body?.attachmentId) {
+                attachments.push({
+                  id: part.body.attachmentId,
+                  name: part.filename || `attachment_${part.body.attachmentId}`,
+                  mimeType: part.mimeType || 'application/octet-stream',
+                  size: part.body.size || 0,
+                });
+              }
+              // Recursively check nested parts
+              if (part.parts) {
+                extractAttachments(part);
+              }
+            }
+          }
+        };
+        
+        extractAttachments(message.payload);
+        
         // Process the email HTML (sanitize, clean, format)
         const processedResult = processEmailHtml({
           html: processedBody,
@@ -291,6 +326,7 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
           plainTextContent: processedResult.plainTextContent,
           hasBlockedImages: processedResult.hasBlockedImages,
           snippet: he.decode(message.snippet || ''),
+          attachments: attachments.length > 0 ? attachments : undefined,
         };
         } catch (error) {
           logger.error(`Error processing message ${message.id}:`, error);
@@ -354,23 +390,60 @@ router.post('/process', authMiddleware, async (req: AuthRequest, res: express.Re
 router.post('/send', authMiddleware, async (req: AuthRequest, res: express.Response) => {
   try {
     const { accessToken } = req.user;
-    const { to, subject, body, threadId } = sendEmailSchema.parse(req.body);
+    const { to, subject, body, threadId, attachments } = sendEmailSchema.parse(req.body);
     
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
     
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
     
-    // Create email message
-    const emailLines = [
-      `To: ${to}`,
-      `Subject: ${subject}`,
-      '',
-      body,
-    ];
+    // Generate a unique boundary for multipart MIME
+    const boundary = `----=_NextPart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    const email = emailLines.join('\n');
-    const encodedEmail = Buffer.from(email).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    let emailContent = '';
+    
+    if (attachments && attachments.length > 0) {
+      // Multipart email with attachments
+      emailContent = [
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        `MIME-Version: 1.0`,
+        `Content-Type: multipart/mixed; boundary="${boundary}"`,
+        '',
+        `--${boundary}`,
+        `Content-Type: text/plain; charset=UTF-8`,
+        `Content-Transfer-Encoding: 7bit`,
+        '',
+        body,
+        '',
+      ].join('\n');
+      
+      // Add attachments
+      for (const attachment of attachments) {
+        emailContent += [
+          `--${boundary}`,
+          `Content-Type: ${attachment.mimeType}; name="${attachment.name}"`,
+          `Content-Disposition: attachment; filename="${attachment.name}"`,
+          `Content-Transfer-Encoding: base64`,
+          '',
+          attachment.data,
+          '',
+        ].join('\n');
+      }
+      
+      emailContent += `--${boundary}--\n`;
+    } else {
+      // Simple text email without attachments
+      emailContent = [
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        `Content-Type: text/plain; charset=UTF-8`,
+        '',
+        body,
+      ].join('\n');
+    }
+    
+    const encodedEmail = Buffer.from(emailContent).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     
     const response = await gmail.users.messages.send({
       userId: 'me',
@@ -437,6 +510,206 @@ router.post('/threads/:threadId/read', authMiddleware, async (req: AuthRequest, 
   } catch (error) {
     logger.error('Error marking thread as read:', error);
     return res.status(500).json({ error: 'Failed to mark thread as read' });
+  }
+});
+
+// Get attachment data
+router.get('/messages/:messageId/attachments/:attachmentId', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+  try {
+    const { accessToken } = req.user;
+    const { messageId, attachmentId } = req.params;
+    
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    
+    const response = await withTimeout(
+      gmail.users.messages.attachments.get({
+        userId: 'me',
+        messageId: messageId,
+        id: attachmentId,
+      }),
+      10000
+    );
+
+    if (!response.data.data) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+
+    return res.json({
+      data: response.data.data,
+      size: response.data.size,
+    });
+  } catch (error) {
+    logger.error('Error fetching attachment:', error);
+    return res.status(500).json({ error: 'Failed to fetch attachment' });
+  }
+});
+
+// Classify emails for "needs reply" and "important updates"
+router.post('/classify', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+  try {
+    const { accessToken } = req.user;
+    const { threadIds } = req.body; // Array of thread IDs to classify
+    
+    if (!Array.isArray(threadIds)) {
+      return res.status(400).json({ error: 'threadIds must be an array' });
+    }
+    
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    
+    // Get the latest message from each thread for classification
+    const emailsToClassify: EmailContent[] = [];
+    const threadMap = new Map<string, any>();
+    
+    for (const threadId of threadIds) {
+      try {
+        const threadResponse = await withTimeout(
+          gmail.users.threads.get({
+            userId: 'me',
+            id: threadId,
+          }),
+          5000
+        );
+        
+        const thread = threadResponse.data;
+        const messages = thread.messages || [];
+        const latestMessage = messages[messages.length - 1];
+        
+        if (latestMessage) {
+          const headers = latestMessage.payload?.headers || [];
+          const subject = headers.find(h => h.name === 'Subject')?.value || '';
+          const from = headers.find(h => h.name === 'From')?.value || '';
+          
+          // Extract plain text body
+          let body = '';
+          if (latestMessage.payload?.parts) {
+            const textPart = latestMessage.payload.parts.find(part => part.mimeType === 'text/plain');
+            if (textPart?.body?.data) {
+              body = Buffer.from(textPart.body.data, 'base64').toString();
+            }
+          } else if (latestMessage.payload?.body?.data) {
+            body = Buffer.from(latestMessage.payload.body.data, 'base64').toString();
+          }
+          
+          emailsToClassify.push({
+            subject,
+            body,
+            from,
+            snippet: latestMessage.snippet || undefined,
+          });
+          
+          threadMap.set(threadId, latestMessage);
+        }
+      } catch (error) {
+        logger.error(`Error fetching thread ${threadId}:`, error);
+      }
+    }
+    
+    // Classify emails using AI (now includes both needs reply and important updates)
+    const classifications = await AIService.classifyBatch(emailsToClassify);
+    
+    // Map results back to thread IDs
+    const results = threadIds.map((threadId, index) => ({
+      threadId,
+      needsReply: classifications[index]?.needsReply || false,
+      isImportant: classifications[index]?.isImportant || false,
+      confidence: classifications[index]?.confidence || 0,
+    }));
+    
+    logger.info(`Classified ${results.length} threads for needs reply and important updates`);
+    return res.json({ classifications: results });
+  } catch (error) {
+    logger.error('Error classifying emails:', error);
+    return res.status(500).json({ error: 'Failed to classify emails' });
+  }
+});
+
+// Generate inbox summary
+router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+  try {
+    const { accessToken } = req.user;
+    
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    
+    // Get threads (limit to 50 for summary)
+    const threadsResponse = await withTimeout(
+      gmail.users.threads.list({
+        userId: 'me',
+        maxResults: 50,
+      }),
+      10000
+    );
+
+    const threads = threadsResponse.data.threads || [];
+    
+    // Get thread details
+    const threadsWithDetails = await Promise.allSettled(
+      threads.map(async (thread) => {
+        try {
+          const threadData = await withTimeout(
+            gmail.users.threads.get({
+              userId: 'me',
+              id: thread.id!,
+              format: 'metadata',
+              metadataHeaders: ['From', 'Subject', 'Date'],
+            }),
+            5000
+          );
+
+          const messages = threadData.data.messages || [];
+          const latestMessage = messages[messages.length - 1];
+          const headers = latestMessage?.payload?.headers || [];
+          
+          const from = headers.find(h => h.name === 'From')?.value || '';
+          const subject = headers.find(h => h.name === 'Subject')?.value || '';
+          const date = headers.find(h => h.name === 'Date')?.value || '';
+          const labelIds = latestMessage?.labelIds || [];
+          const isUnread = labelIds.includes('UNREAD');
+
+          return {
+            id: thread.id,
+            subject,
+            from,
+            date,
+            read: !isUnread,
+            labels: labelIds,
+          };
+        } catch (error) {
+          logger.error(`Error getting thread ${thread.id}:`, error);
+          return null;
+        }
+      })
+    );
+
+    const validThreads = threadsWithDetails
+      .filter(result => result.status === 'fulfilled' && result.value)
+      .map(result => (result as PromiseFulfilledResult<any>).value);
+
+    // Classify emails first
+    const emailsToClassify: EmailContent[] = validThreads.map(thread => ({
+      subject: thread.subject,
+      body: '', // We don't need body for summary
+      from: thread.from,
+    }));
+
+    const classifications = await AIService.classifyBatch(emailsToClassify);
+    
+    // Generate summary
+    const summary = await AIService.generateInboxSummary(validThreads, classifications);
+    
+    logger.info(`Generated inbox summary for ${validThreads.length} threads`);
+    return res.json({ summary });
+  } catch (error) {
+    logger.error('Error generating inbox summary:', error);
+    return res.status(500).json({ error: 'Failed to generate inbox summary' });
   }
 });
 

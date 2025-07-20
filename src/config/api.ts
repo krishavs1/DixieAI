@@ -152,7 +152,7 @@ export const API_CONFIG = {
       SEND: '/api/email/send',
     },
   },
-  TIMEOUT: 30000, // 30 seconds - increased for Gmail API calls
+  TIMEOUT: 60000, // 60 seconds - increased for AI classification of 50 emails
 };
 
 export const GOOGLE_CONFIG = {
