@@ -46,6 +46,8 @@ const HomeScreen = () => {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechRate, setSpeechRate] = useState(0.8);
+  const [selectedVoice, setSelectedVoice] = useState('en-GB');
+  const [availableVoices, setAvailableVoices] = useState<string[]>([]);
   const slideAnim = useState(new Animated.Value(-300))[0];
 
   if (!authContext) {
@@ -68,6 +70,20 @@ const HomeScreen = () => {
         stopSpeaking();
       }
     };
+  }, []);
+
+  // Initialize voices
+  useEffect(() => {
+    getAvailableVoices();
+    
+    // Welcome message for British voice
+    setTimeout(() => {
+      showMessage({
+        message: '🇬🇧 British voice set as default - sophisticated and natural!',
+        type: 'success',
+        duration: 3000,
+      });
+    }, 1000);
   }, []);
 
   // Apply filters and categorization to threads
@@ -395,7 +411,7 @@ const HomeScreen = () => {
   // Speak the summary using text-to-speech
   const speakSummary = (text: string) => {
     console.log('Speech function called with text:', text.substring(0, 50) + '...');
-    console.log('Current speech state:', { isSpeaking, speechRate });
+    console.log('Current speech state:', { isSpeaking, speechRate, selectedVoice });
     
     if (isSpeaking) {
       console.log('Stopping current speech...');
@@ -405,17 +421,17 @@ const HomeScreen = () => {
     }
 
     setIsSpeaking(true);
-    console.log('Starting speech with rate:', speechRate);
+    console.log('Starting speech with rate:', speechRate, 'voice:', selectedVoice);
     
     Speech.speak(text, {
-      language: 'en-US',
-      pitch: 1.0,
+      language: selectedVoice,
+      pitch: 1.1, // Slightly higher pitch for more natural sound
       rate: speechRate,
       onDone: () => {
         console.log('Speech completed successfully');
         setIsSpeaking(false);
       },
-      onError: (error) => {
+      onError: (error: any) => {
         console.error('Speech error:', error);
         setIsSpeaking(false);
         showMessage({
@@ -482,9 +498,9 @@ const HomeScreen = () => {
     
     // Try different speech configurations
     const testConfigs = [
-      { language: 'en-US', pitch: 1.0, rate: 0.8 },
-      { language: 'en', pitch: 1.0, rate: 1.0 },
-      { language: 'en-US', pitch: 1.2, rate: 0.6 },
+      { language: selectedVoice, pitch: 1.1, rate: 0.8 },
+      { language: selectedVoice, pitch: 1.0, rate: 1.0 },
+      { language: selectedVoice, pitch: 1.2, rate: 0.6 },
     ];
     
     let configIndex = 0;
@@ -501,7 +517,7 @@ const HomeScreen = () => {
       const config = testConfigs[configIndex];
       console.log(`Trying speech config ${configIndex + 1}:`, config);
       
-      Speech.speak(`Test ${configIndex + 1}: Hello, this is Dixie speaking.`, {
+      Speech.speak(`Test ${configIndex + 1}: Hello, this is Dixie speaking with a more natural voice!`, {
         ...config,
         onDone: () => {
           console.log(`Test ${configIndex + 1} completed`);
@@ -711,6 +727,127 @@ const HomeScreen = () => {
     </View>
   );
 
+  // Get available voices for better speech
+  const getAvailableVoices = async () => {
+    try {
+      // Expanded voice options with more variety
+      const voices = [
+        'en-US', // Default US English
+        'en-GB', // British English (often sounds more natural)
+        'en-AU', // Australian English
+        'en-CA', // Canadian English
+        'en-IN', // Indian English (clear pronunciation)
+        'en-IE', // Irish English (friendly accent)
+        'en-ZA', // South African English
+        'en-NZ', // New Zealand English
+        'en-PH', // Philippine English
+        'en-SG', // Singapore English
+      ];
+      
+      setAvailableVoices(voices);
+      console.log('Available voices:', voices);
+    } catch (error) {
+      console.error('Error getting voices:', error);
+    }
+  };
+
+  // Preview all voices quickly
+  const previewAllVoices = () => {
+    let voiceIndex = 0;
+    
+    const previewNextVoice = () => {
+      if (voiceIndex >= availableVoices.length) {
+        showMessage({
+          message: 'Voice preview complete! Tap the person button to select your favorite.',
+          type: 'success',
+        });
+        return;
+      }
+      
+      const voice = availableVoices[voiceIndex];
+      const voiceNames = {
+        'en-US': 'American',
+        'en-GB': 'British',
+        'en-AU': 'Australian',
+        'en-CA': 'Canadian',
+        'en-IN': 'Indian',
+        'en-IE': 'Irish',
+        'en-ZA': 'South African',
+        'en-NZ': 'New Zealand',
+        'en-PH': 'Philippine',
+        'en-SG': 'Singapore',
+      };
+      
+      const voiceName = voiceNames[voice as keyof typeof voiceNames] || voice;
+      
+      Speech.speak(`This is the ${voiceName} accent.`, {
+        language: voice,
+        pitch: 1.1,
+        rate: 0.8,
+        onDone: () => {
+          voiceIndex++;
+          setTimeout(previewNextVoice, 500);
+        },
+      });
+    };
+    
+    showMessage({
+      message: 'Starting voice preview...',
+      type: 'info',
+    });
+    
+    previewNextVoice();
+  };
+
+  // Change voice
+  const changeVoice = () => {
+    const voices = availableVoices;
+    const currentIndex = voices.indexOf(selectedVoice);
+    const nextIndex = (currentIndex + 1) % voices.length;
+    const newVoice = voices[nextIndex];
+    
+    setSelectedVoice(newVoice);
+    
+    // Fun descriptions for each voice
+    const voiceDescriptions = {
+      'en-US': '🇺🇸 American - Classic and clear',
+      'en-GB': '🇬🇧 British - Sophisticated and natural',
+      'en-AU': '🇦🇺 Australian - Friendly and laid-back',
+      'en-CA': '🇨🇦 Canadian - Polite and clear',
+      'en-IN': '🇮🇳 Indian - Warm and articulate',
+      'en-IE': '🇮🇪 Irish - Charming and melodic',
+      'en-ZA': '🇿🇦 South African - Unique and engaging',
+      'en-NZ': '🇳🇿 New Zealand - Kiwi charm',
+      'en-PH': '🇵🇭 Philippine - Clear and friendly',
+      'en-SG': '🇸🇬 Singapore - International and precise',
+    };
+    
+    const description = voiceDescriptions[newVoice as keyof typeof voiceDescriptions] || newVoice;
+    
+    showMessage({
+      message: `Voice: ${description}`,
+      type: 'info',
+      duration: 2000,
+    });
+    
+    // Test the new voice with a fun message
+    const testMessages = [
+      'Hello there! This is Dixie with a new accent!',
+      'G\'day! How\'s your inbox looking today?',
+      'Top of the morning! Ready to tackle those emails?',
+      'Cheers! Let\'s get your inbox sorted!',
+      'Brilliant! I\'m here to help with your emails!',
+    ];
+    
+    const randomMessage = testMessages[Math.floor(Math.random() * testMessages.length)];
+    
+    Speech.speak(randomMessage, {
+      language: newVoice,
+      pitch: 1.1,
+      rate: 0.8,
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
             {/* Header */}
@@ -754,6 +891,13 @@ const HomeScreen = () => {
           </TouchableOpacity>
           <TouchableOpacity onPress={testBasicAudio} style={styles.testButton}>
             <Ionicons name="musical-notes" size={20} color="#FF5722" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={previewAllVoices} 
+            onLongPress={changeVoice}
+            style={styles.testButton}
+          >
+            <Ionicons name="person" size={20} color="#4CAF50" />
           </TouchableOpacity>
         </View>
 
@@ -891,6 +1035,12 @@ const HomeScreen = () => {
                       style={styles.speedButton}
                     >
                       <Text style={styles.speedText}>{speechRate}x</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      onPress={changeVoice}
+                      style={styles.voiceButton}
+                    >
+                      <Text style={styles.voiceText}>{selectedVoice}</Text>
                     </TouchableOpacity>
                   </>
                 )}
@@ -1607,6 +1757,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4285F4',
     marginLeft: 5,
+  },
+  voiceButton: {
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e1e5e9',
+  },
+  voiceText: {
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '500',
   },
 });
 
