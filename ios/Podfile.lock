@@ -26,7 +26,7 @@ PODS:
     - ExpoModulesCore
   - EXNotifications (0.31.4):
     - ExpoModulesCore
-  - Expo (53.0.19):
+  - Expo (53.0.20):
     - DoubleConversion
     - ExpoModulesCore
     - glog
@@ -306,7 +306,7 @@ PODS:
     - ExpoModulesCore
   - ExpoHaptics (14.1.4):
     - ExpoModulesCore
-  - ExpoHead (5.1.3):
+  - ExpoHead (5.1.4):
     - ExpoModulesCore
   - ExpoImagePicker (16.1.4):
     - ExpoModulesCore
@@ -314,7 +314,7 @@ PODS:
     - ExpoModulesCore
   - ExpoLinking (7.1.7):
     - ExpoModulesCore
-  - ExpoModulesCore (2.4.2):
+  - ExpoModulesCore (2.5.0):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -1778,6 +1778,8 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - react-native-voice (1.1.9):
+    - React
   - react-native-webview (13.13.5):
     - DoubleConversion
     - glog
@@ -2124,7 +2126,7 @@ PODS:
     - React-logger (= 0.79.5)
     - React-perflogger (= 0.79.5)
     - React-utils (= 0.79.5)
-  - RNCAsyncStorage (2.2.0):
+  - RNCAsyncStorage (2.1.2):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -2446,6 +2448,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - Yoga
   - SocketRocket (0.7.1)
+  - TextToSpeech (4.1.1):
+    - React-Core
   - Yoga (0.0.0)
 
 DEPENDENCIES:
@@ -2522,6 +2526,7 @@ DEPENDENCIES:
   - "react-native-netinfo (from `../node_modules/@react-native-community/netinfo`)"
   - react-native-render-html (from `../node_modules/react-native-render-html`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
+  - "react-native-voice (from `../node_modules/@react-native-community/voice`)"
   - react-native-webview (from `../node_modules/react-native-webview`)
   - React-NativeModulesApple (from `../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)
   - React-oscompat (from `../node_modules/react-native/ReactCommon/oscompat`)
@@ -2561,6 +2566,7 @@ DEPENDENCIES:
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
   - RNVectorIcons (from `../node_modules/react-native-vector-icons`)
+  - TextToSpeech (from `../node_modules/react-native-tts`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
@@ -2718,6 +2724,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-render-html"
   react-native-safe-area-context:
     :path: "../node_modules/react-native-safe-area-context"
+  react-native-voice:
+    :path: "../node_modules/@react-native-community/voice"
   react-native-webview:
     :path: "../node_modules/react-native-webview"
   React-NativeModulesApple:
@@ -2796,6 +2804,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-svg"
   RNVectorIcons:
     :path: "../node_modules/react-native-vector-icons"
+  TextToSpeech:
+    :path: "../node_modules/react-native-tts"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
@@ -2811,7 +2821,7 @@ SPEC CHECKSUMS:
   EXJSONUtils: 1d3e4590438c3ee593684186007028a14b3686cd
   EXManifests: f4cc4a62ee4f1c8a9cf2bb79d325eac6cb9f5684
   EXNotifications: d0a50a5490845c702f2c605e94533ae5ddf1aadb
-  Expo: 6e2b482fa24909b52b80ba00271e6d7742c1ef9f
+  Expo: 666a397fcb608d72b019e16ba139b74e93e0b7d7
   expo-dev-client: f1b99dfea0c9174d2e4ec96c2c5461587dda1e86
   expo-dev-launcher: 27e8eba58d52b2f471b0c4001b0535a1c0b5610d
   expo-dev-menu: 2868212810f6651bc5c30e72c636ef64de31ec6b
@@ -2824,11 +2834,11 @@ SPEC CHECKSUMS:
   ExpoFileSystem: 9681caebda23fa1b38a12a9c68b2bade7072ce20
   ExpoFont: 091a47eeaa1b30b0b760aa1d0a2e7814e8bf6fe6
   ExpoHaptics: 68c215e070f660e0a29c45dcda4f60eeff08aefb
-  ExpoHead: 9929511f8f28f2b41294c39fa66760ac74742078
+  ExpoHead: 7c1893efc8dc79570bdcbdadce175723f4c037ec
   ExpoImagePicker: d2fff488a0738343a3cc21e98544ee9feafaa0e6
   ExpoKeepAwake: e8dedc115d9f6f24b153ccd2d1d8efcdfd68a527
   ExpoLinking: 343a89ea864a851831fd4495e8aea01cf0f6a36f
-  ExpoModulesCore: 33476f0f608d791bbaf263af22a00d3b8877f6bc
+  ExpoModulesCore: 16f74d8df26d7e4b6bf7eb3d0effaf0f15df7b80
   ExpoSpeech: fceabf6bf31aa9530ef0696e6793571edb702068
   ExpoSplashScreen: 6f9213be0c60f2756a2f8220c36f4b90c55e3dbd
   ExpoSystemUI: ecb2b2e8ee9468295e7c33fa10eb4e73e581389a
@@ -2878,6 +2888,7 @@ SPEC CHECKSUMS:
   react-native-netinfo: f0a9899081c185db1de5bb2fdc1c88c202a059ac
   react-native-render-html: 984dfe2294163d04bf5fe25d7c9f122e60e05ebe
   react-native-safe-area-context: 00d03dc688ba86664be66f9e3f203fc7d747d899
+  react-native-voice: eb6b7c7f752310f72a6f4d64c2fba6ee724d6604
   react-native-webview: cde150463e7caa49b316b0ed1871e7ef8193bef4
   React-NativeModulesApple: 3ecc647742d33ad617bd2805902e3f91f2b3008f
   React-oscompat: 0592889a9fcf0eacb205532028e4a364e22907dd
@@ -2910,7 +2921,7 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: c42e7abdd2228ae583bdabc3dcd8e5cda6bef944
   ReactCodegen: 4d001cd4fa72b876bbff500bbb3811e458bb3c72
   ReactCommon: 41137f7e87cf7fd1c041a7124dfa3d0d48aa43f3
-  RNCAsyncStorage: 2cf7d05f5b1bc38680b6c83971e535a6ae9c5bc7
+  RNCAsyncStorage: c1bbcf629d7206d1e19310827848b98d68a4cbaf
   RNGestureHandler: ccf4105b125002bd88e39d2a1f2b7e6001bcdf34
   RNGoogleSignin: b8f3531a795ddef60fccd07e6b053cc6535d94f0
   RNReanimated: 8b24b49fc13fce9a6e1729ccff645a63d2b7a6d1
@@ -2918,6 +2929,7 @@ SPEC CHECKSUMS:
   RNSVG: ee32efbed652c5151fd3f98bed13c68af285bc38
   RNVectorIcons: 0d358eb5b59aa90c8c148e745edd3161d49eb6c5
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
+  TextToSpeech: 2b930ec3756afde499061f4f01ea895e1f75dccb
   Yoga: adb397651e1c00672c12e9495babca70777e411e
 
 PODFILE CHECKSUM: db79c54471247a80a45bbd80575984b90d5e2171

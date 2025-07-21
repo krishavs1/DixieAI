@@ -1,26 +1,30 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
   TextInput,
-  SafeAreaView,
-  ActivityIndicator,
-  RefreshControl,
   Modal,
   ScrollView,
-  Animated,
-  Dimensions,
+  RefreshControl,
+  ActivityIndicator,
   Alert,
+  Animated,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
 import * as Clipboard from 'expo-clipboard';
+import Voice from '@react-native-community/voice';
+import Tts from 'react-native-tts';
 
-import { useNavigation } from '@react-navigation/native';
+import { useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { emailService, EmailThread, EmailLabel, EmailCategory, EmailCategoryInfo, EmailFilter, SYSTEM_LABELS } from '../services/emailService';
 import { showMessage } from 'react-native-flash-message';
@@ -49,8 +53,19 @@ const HomeScreen = () => {
   const [speechRate, setSpeechRate] = useState(0.8);
   const [selectedVoice, setSelectedVoice] = useState('en-GB');
   const [availableVoices, setAvailableVoices] = useState<string[]>([]);
+  // Add state for visual feedback
   const [isListening, setIsListening] = useState(false);
-  const [voiceCommand, setVoiceCommand] = useState('');
+  const [voiceText, setVoiceText] = useState('');
+  const [agentResponse, setAgentResponse] = useState('');
+  const [isAgentProcessing, setIsAgentProcessing] = useState(false);
+  const [voiceInput, setVoiceInput] = useState('');
+  const [showVoiceAgent, setShowVoiceAgent] = useState(false);
+  const [listeningAnimation, setListeningAnimation] = useState(false);
+  const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
+  const [isProcessingCommand, setIsProcessingCommand] = useState(false);
+  const [silenceTimeout, setSilenceTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const isListeningRef = useRef(false);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useState(new Animated.Value(-300))[0];
 
   if (!authContext) {
@@ -364,7 +379,7 @@ const HomeScreen = () => {
       ).length;
       
       const categoryData = {
-        primary: { name: 'nigga', color: '#4285F4', icon: 'mail' },
+        primary: { name: 'Primary', color: '#4285F4', icon: 'mail' },
         social: { name: 'Social', color: '#34A853', icon: 'people' },
         promotions: { name: 'Promotions', color: '#FBBC04', icon: 'pricetag' },
         updates: { name: 'Updates', color: '#EA4335', icon: 'notifications' },
@@ -382,100 +397,517 @@ const HomeScreen = () => {
   };
 
   const handleVoiceCommand = () => {
-    // For now, show a simple command picker
-    // In the future, we can integrate with Expo's speech recognition
-    Alert.alert(
-      'Voice Commands',
-      'Choose a command:',
-      [
-        { text: '📊 Generate Summary', onPress: () => processVoiceCommand('summary') },
-        { text: '🔍 Search Emails', onPress: () => processVoiceCommand('search') },
-        { text: '🔴 Show Important', onPress: () => processVoiceCommand('important') },
-        { text: '📝 Show Reply Needed', onPress: () => processVoiceCommand('reply') },
-        { text: '🧹 Clear Filters', onPress: () => processVoiceCommand('clear') },
-        { text: '🔄 Refresh', onPress: () => processVoiceCommand('refresh') },
-        { text: '❓ Help', onPress: () => processVoiceCommand('help') },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    console.log('🎤 MIC BUTTON PRESSED - Opening voice agent...');
+    console.log('Current showVoiceAgent state:', showVoiceAgent);
+    
+    // Show voice agent on HomeScreen
+    try {
+      setShowVoiceAgent(true);
+      setAgentResponse('Voice agent ready! Tap the mic to start listening.');
+      console.log('✅ Voice agent state set to true');
+    } catch (error) {
+      console.log('❌ Error showing voice agent:', error);
+      showMessage({
+        message: 'Error opening voice agent. Please try again.',
+        type: 'warning',
+      });
+    }
   };
 
-  const processVoiceCommand = (command: string) => {
-    console.log('Processing voice command:', command);
+  const processVoiceCommand = async (text: string) => {
+    console.log('=== PROCESSING VOICE COMMAND ===');
+    console.log('Text received:', text);
+    console.log('Current voiceText state:', voiceText);
+    console.log('Current state - isListening:', isListening, 'isProcessingCommand:', isProcessingCommand);
     
-    // Generate inbox summary
-    if (command.includes('summary') || command.includes('overview') || command.includes('analyze')) {
-    showMessage({
-        message: '📊 Generating inbox summary...',
-        type: 'success',
-      });
-      generateInboxSummary();
+    // Prevent multiple simultaneous command processing
+    if (isProcessingCommand) {
+      console.log('Already processing a command, ignoring:', text);
+      return;
     }
     
-    // Search for specific terms
-    else if (command.includes('search') || command.includes('find')) {
-      // For now, just clear search and show message
-      setSearchQuery('');
-      showMessage({
-        message: '🔍 Search cleared - use the search bar above',
-      type: 'info',
-    });
+    console.log('Setting processing flag to true');
+    setIsProcessingCommand(true);
+    
+    // Don't change the transcript - keep what was said visible
+    setAgentResponse('Processing your request...');
+    
+    const lowerText = text.toLowerCase();
+    console.log('Lowercase text:', lowerText);
+    console.log('Does it contain "summarize"?', lowerText.includes('summarize'));
+    console.log('Does it contain "summary"?', lowerText.includes('summary'));
+    
+    if (lowerText.includes('summarize') || lowerText.includes('summary')) {
+      console.log('✅ DETECTED SUMMARIZE COMMAND - Processing...');
+      
+      // Set loading state
+      setAgentResponse('Generating inbox summary...');
+      
+      try {
+        console.log('Calling emailService.generateInboxSummary...');
+        // Call the email service directly to get the summary
+        const summary = await emailService.generateInboxSummary(token);
+        console.log('✅ Summary generated successfully:', summary);
+        
+        // Set the response first
+        setAgentResponse(summary);
+        
+        // Speak the summary
+        if (Speech && typeof Speech.speak === 'function') {
+          console.log('Speaking summary via Speech');
+          setIsTtsSpeaking(true);
+          
+          // Wait a moment before speaking
+          setTimeout(async () => {
+            try {
+              await Speech.speak(summary, {
+                language: 'en-US',
+                pitch: 1.1,
+                rate: 0.8,
+                onDone: () => {
+                  console.log('Speech completed successfully');
+                  setIsTtsSpeaking(false);
+                },
+                onError: (error: any) => {
+                  console.error('Speech error:', error);
+                  setIsTtsSpeaking(false);
+                },
+                onStart: () => {
+                  console.log('Speech started successfully');
+                },
+                onStopped: () => {
+                  console.log('Speech was stopped');
+                  setIsTtsSpeaking(false);
+                },
+              });
+            } catch (error) {
+              console.error('Error starting speech:', error);
+              setIsTtsSpeaking(false);
+            }
+          }, 500);
+        } else {
+          console.log('Speech module not available for TTS');
+          setIsTtsSpeaking(false);
+        }
+        
+        console.log('✅ Command processing completed successfully');
+      } catch (error) {
+        console.error('❌ Error generating summary:', error);
+        
+        // Fallback summary if backend fails
+        const fallbackSummary = "Hey! I'm having trouble connecting to your email right now, but I can see you want a summary. Try checking your connection and ask me again in a moment!";
+        setAgentResponse(fallbackSummary);
+        
+        // Speak the fallback message
+        if (Speech && typeof Speech.speak === 'function') {
+          setIsTtsSpeaking(true);
+          setTimeout(async () => {
+            try {
+              await Speech.speak(fallbackSummary, {
+                language: 'en-US',
+                pitch: 1.1,
+                rate: 0.8,
+                onDone: () => {
+                  console.log('Fallback speech completed');
+                  setIsTtsSpeaking(false);
+                },
+                onError: (error: any) => {
+                  console.error('Fallback speech error:', error);
+                  setIsTtsSpeaking(false);
+                },
+              });
+            } catch (error) {
+              console.error('Error starting fallback speech:', error);
+              setIsTtsSpeaking(false);
+            }
+          }, 500);
+        } else {
+          console.log('Speech module not available for fallback TTS');
+          setIsTtsSpeaking(false);
+        }
+      }
+    } else {
+      console.log('❌ No summarize command detected in:', text);
+      setAgentResponse('I heard: ' + text + '. Try saying "summarize my inbox"');
     }
     
-    // Show important emails
-    else if (command.includes('important') || command.includes('urgent')) {
-      setCurrentCategory('important' as EmailCategory);
-      showMessage({
-        message: '🔴 Showing important emails',
-        type: 'success',
-      });
-    }
+    // Reset processing flag after a delay
+    setTimeout(() => {
+      console.log('Resetting processing flag');
+      setIsProcessingCommand(false);
+    }, 1000);
     
-    // Show emails needing reply
-    else if (command.includes('reply') || command.includes('respond')) {
-      setCurrentCategory('reply' as EmailCategory);
-      showMessage({
-        message: '📝 Showing emails needing reply',
-        type: 'success',
-      });
-    }
-    
-    // Clear filters
-    else if (command.includes('clear') || command.includes('reset')) {
-      clearFilters();
-      showMessage({
-        message: '🧹 Cleared all filters',
-        type: 'success',
-      });
-    }
-    
-    // Refresh emails
-    else if (command.includes('refresh') || command.includes('update')) {
-      fetchThreads();
-      showMessage({
-        message: '🔄 Refreshing emails...',
-        type: 'info',
-      });
-    }
-    
-    // Help
-    else if (command.includes('help') || command.includes('commands')) {
-      showMessage({
-        message: '🎤 Say: "summary", "search [term]", "important", "reply", "clear", "refresh", or "help"',
-        type: 'info',
-        duration: 5000,
-      });
-    }
-    
-    // Unknown command
-    else {
-      showMessage({
-        message: `❓ Unknown command: "${command}". Say "help" for available commands.`,
-        type: 'warning',
-        duration: 3000,
-      });
+    console.log('=== END PROCESSING VOICE COMMAND ===');
+  };
+
+  const handleVoiceInputSubmit = () => {
+    console.log('Voice input submit:', voiceInput);
+    if (voiceInput.trim()) {
+      console.log('Processing text command:', voiceInput);
+      processVoiceCommand(voiceInput);
+      setVoiceInput('');
+    } else {
+      console.log('Empty voice input');
     }
   };
+
+  const closeVoiceAgent = () => {
+    console.log('Closing voice agent and cleaning up...');
+    setShowVoiceAgent(false);
+    setAgentResponse('');
+    setVoiceInput('');
+    setIsAgentProcessing(false);
+    
+    // Stop voice recognition and clean up
+    stopListening();
+    
+    // Reset TTS speaking state
+    setIsTtsSpeaking(false);
+  };
+
+  // Voice recognition event handlers
+  const onSpeechStart = (event: any) => {
+    console.log('Speech recognition started:', event);
+    setVoiceText('Listening...');
+  };
+
+  const onSpeechEnd = (event: any) => {
+    console.log('Speech recognition ended:', event);
+    
+    // If we have text and speech ended, trigger the silence timeout after a short delay
+    if (voiceText && voiceText !== 'Listening...' && !isProcessingCommand) {
+      console.log('Speech ended with text, will trigger timeout in 1 second');
+      setTimeout(() => {
+        if (isListeningRef.current && !isProcessingCommand) {
+          console.log('🔥 MANUAL TIMEOUT TRIGGER - Stopping listening after speech end');
+          setIsListening(false);
+          setListeningAnimation(false);
+          pulseAnim.stopAnimation();
+          pulseAnim.setValue(1);
+          isListeningRef.current = false;
+          
+          // Stop the Voice module
+          if (Voice && typeof Voice.stop === 'function') {
+            try {
+              Voice.stop();
+              console.log('Voice recognition stopped due to manual timeout');
+            } catch (error) {
+              console.log('Error stopping voice recognition:', error);
+            }
+          }
+          
+          // Process the command with the current voiceText
+          console.log('🔥 Processing FINAL transcript after manual timeout:', voiceText);
+          if (voiceText && voiceText !== 'Listening...') {
+            processVoiceCommand(voiceText);
+          }
+        }
+      }, 1000);
+    }
+  };
+
+  const onSpeechError = (error: any) => {
+    console.log('Speech recognition error:', error);
+    setIsListening(false);
+    setListeningAnimation(false);
+    pulseAnim.stopAnimation();
+    
+    if (error.error) {
+      if (error.error.code === '7') {
+        setVoiceText('No speech detected. Try again or type your command.');
+        setAgentResponse('No speech was detected. Please try speaking louder or use the text input.');
+      } else if (error.error.code === '1') {
+        setVoiceText('Speech recognition not available. Please type your command.');
+        setAgentResponse('Speech recognition is not available in this environment. Please use the text input.');
+      } else {
+        setVoiceText(`Speech recognition error: ${error.error.message || 'Unknown error'}`);
+        setAgentResponse('There was an error with speech recognition. Please use the text input.');
+      }
+    } else {
+      setVoiceText('Speech recognition failed. Please type your command.');
+      setAgentResponse('Speech recognition failed. Please use the text input below.');
+    }
+  };
+
+  const onSpeechResults = (event: any) => {
+    console.log('Speech results received:', event);
+    
+    // Don't process results if we're already processing a command
+    if (isProcessingCommand) {
+      console.log('Already processing command, ignoring speech results');
+      return;
+    }
+    
+    if (event.value && event.value.length > 0) {
+      const recognizedText = event.value[0];
+      console.log('Recognized text:', recognizedText);
+      
+      // Update the transcript with the recognized text
+      setVoiceText(recognizedText);
+      
+      // Clear any existing silence timeout
+      if (silenceTimeout) {
+        clearTimeout(silenceTimeout);
+      }
+      
+      // Set a new silence timeout - this will process the FINAL transcript
+      const newTimeout = setTimeout(() => {
+        if (isListeningRef.current && !isProcessingCommand) {
+          console.log('🔥 SILENCE TIMEOUT REACHED - Processing final transcript');
+          setIsListening(false);
+          setListeningAnimation(false);
+          pulseAnim.stopAnimation();
+          pulseAnim.setValue(1);
+          isListeningRef.current = false;
+          
+          // Stop the Voice module
+          if (Voice && typeof Voice.stop === 'function') {
+            try {
+              Voice.stop();
+              console.log('Voice recognition stopped due to silence timeout');
+            } catch (error) {
+              console.log('Error stopping voice recognition:', error);
+            }
+          }
+          
+          // Process the command with the recognized text directly (not relying on state)
+          console.log('🔥 Processing FINAL transcript after silence timeout:', recognizedText);
+          if (recognizedText && recognizedText !== 'Listening...') {
+            processVoiceCommand(recognizedText);
+          }
+        }
+      }, 2500); // 2.5 second silence timeout
+      
+      setSilenceTimeout(newTimeout);
+    }
+  };
+
+  const onSpeechPartialResults = (event: any) => {
+    const results = event.value;
+    if (results && results.length > 0) {
+      setVoiceText(results[0]);
+    }
+  };
+
+  const startListening = async () => {
+    try {
+      console.log('Starting voice recognition...');
+      console.log('Voice module available:', !!Voice);
+      
+      // Don't start listening if TTS is currently speaking
+      if (isTtsSpeaking) {
+        console.log('TTS is speaking, not starting voice recognition');
+        return;
+      }
+      
+      // Don't start if already listening
+      if (isListening) {
+        console.log('Already listening, not starting again');
+        return;
+      }
+      
+      setIsListening(true);
+      setListeningAnimation(true);
+      setVoiceText('Listening...');
+      setAgentResponse('');
+      isListeningRef.current = true;
+      
+      // Start pulsing animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+      
+      // Check if Voice is available (native module)
+      if (Voice && typeof Voice.start === 'function') {
+        console.log('Using native Voice module');
+        
+        // Make sure to stop any existing recognition first
+        try {
+          await Voice.stop();
+        } catch (e) {
+          console.log('No existing recognition to stop');
+        }
+        
+        // Start voice recognition
+        await Voice.start('en-US');
+      } else {
+        console.log('Voice module not available - using fallback');
+        setVoiceText('Voice recognition not available. Please type your command.');
+        setIsListening(false);
+        setListeningAnimation(false);
+      }
+    } catch (error) {
+      console.error('Error starting voice recognition:', error);
+      setVoiceText('Error starting voice recognition. Please try again.');
+      setIsListening(false);
+      setListeningAnimation(false);
+    }
+  };
+
+  const stopListening = async () => {
+    try {
+      console.log('Stopping voice recognition...');
+      
+      // Clear any existing silence timeout
+      if (silenceTimeout) {
+        clearTimeout(silenceTimeout);
+        setSilenceTimeout(null);
+      }
+      
+      // Stop the animation
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+      
+      // Update UI state
+      setIsListening(false);
+      setListeningAnimation(false);
+      setVoiceText('Voice recognition stopped');
+      isListeningRef.current = false;
+      
+      // Stop the Voice module
+      if (Voice && typeof Voice.stop === 'function') {
+        try {
+          await Voice.stop();
+          console.log('Voice recognition stopped successfully');
+        } catch (error) {
+          console.log('Error stopping voice recognition:', error);
+        }
+      }
+      
+      // Also destroy to clean up completely
+      if (Voice && typeof Voice.destroy === 'function') {
+        try {
+          await Voice.destroy();
+          console.log('Voice recognition destroyed');
+        } catch (error) {
+          console.log('Error destroying voice recognition:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error in stopListening:', error);
+      // Force reset state even if there's an error
+      setIsListening(false);
+      setListeningAnimation(false);
+      setVoiceText('Voice recognition stopped');
+    }
+  };
+
+  const handleSummarizeCommand = async () => {
+    setIsAgentProcessing(true);
+    setAgentResponse('Generating inbox summary...');
+    
+    try {
+      // Call the existing generateInboxSummary function
+      await generateInboxSummary();
+      
+      // Get the summary text and speak it
+      const summaryText = 'Inbox summary generated! Check the notification above for details.';
+      setAgentResponse(summaryText);
+      
+      // Speak the summary out loud
+      try {
+        if (Tts && typeof Tts.speak === 'function') {
+          Tts.speak(summaryText);
+        } else {
+          // Fallback to Expo Speech
+          Speech.speak(summaryText, {
+            rate: 0.5,
+            pitch: 1.0,
+            language: 'en-US'
+          });
+        }
+      } catch (ttsError) {
+        console.log('TTS error, using Expo Speech fallback:', ttsError);
+        Speech.speak(summaryText, {
+          rate: 0.5,
+          pitch: 1.0,
+          language: 'en-US'
+        });
+      }
+      
+    } catch (error) {
+      const errorMessage = 'Sorry, I encountered an error while summarizing your inbox.';
+      setAgentResponse(errorMessage);
+      try {
+        if (Tts && typeof Tts.speak === 'function') {
+          Tts.speak(errorMessage);
+        } else {
+          Speech.speak(errorMessage, {
+            rate: 0.5,
+            pitch: 1.0,
+            language: 'en-US'
+          });
+        }
+      } catch (ttsError) {
+        console.log('TTS error in error handling:', ttsError);
+      }
+    } finally {
+      setIsAgentProcessing(false);
+    }
+  };
+
+  // Set up voice recognition event listeners
+  useEffect(() => {
+    try {
+      // Check if Voice module is available
+      console.log('Voice module check:', Voice);
+      console.log('Voice module type:', typeof Voice);
+      console.log('Voice.onSpeechStart exists:', typeof Voice?.onSpeechStart);
+      console.log('Voice.start exists:', typeof Voice?.start);
+      console.log('Voice.isAvailable exists:', typeof Voice?.isAvailable);
+      
+      if (Voice && typeof Voice.start === 'function') {
+        // Use the correct Voice API with direct property assignment
+        Voice.onSpeechStart = onSpeechStart;
+        Voice.onSpeechEnd = onSpeechEnd;
+        Voice.onSpeechError = onSpeechError;
+        Voice.onSpeechResults = onSpeechResults;
+        Voice.onSpeechPartialResults = onSpeechPartialResults;
+        console.log('Voice module initialized successfully with direct assignment');
+        
+        // Request microphone permission
+        Voice.isAvailable().then((available: number) => {
+          console.log('Voice module available:', available);
+        }).catch((error: any) => {
+          console.log('Error checking Voice availability:', error);
+        });
+      } else {
+        console.log('Voice module not available');
+      }
+    } catch (error) {
+      console.log('Error setting up Voice module:', error);
+    }
+    
+    // Cleanup function to stop voice recognition when component unmounts
+    return () => {
+      console.log('Cleaning up Voice module...');
+      if (Voice && typeof Voice.stop === 'function') {
+        try {
+          Voice.stop();
+        } catch (error) {
+          console.log('Error stopping Voice during cleanup:', error);
+        }
+      }
+      if (Voice && typeof Voice.destroy === 'function') {
+        try {
+          Voice.destroy();
+        } catch (error) {
+          console.log('Error destroying Voice during cleanup:', error);
+        }
+      }
+    };
+  }, []);
 
   // Test function to manually add badges for debugging
   const testBadges = () => {
@@ -999,7 +1431,11 @@ const HomeScreen = () => {
           <TouchableOpacity onPress={generateInboxSummary} style={styles.summaryButton}>
             <Ionicons name="analytics" size={20} color="#34A853" />
         </TouchableOpacity>
-          <TouchableOpacity onPress={() => processVoiceCommand('help')} style={styles.helpButton}>
+          <TouchableOpacity onPress={() => showMessage({
+            message: '🎤 Tap the mic button to open voice agent and say "Summarize my inbox" with your voice!',
+            type: 'info',
+            duration: 3000,
+          })} style={styles.helpButton}>
             <Ionicons name="help-circle" size={20} color="#607D8B" />
           </TouchableOpacity>
         </View>
@@ -1056,6 +1492,124 @@ const HomeScreen = () => {
       }}>
         <Ionicons name="create" size={24} color="#fff" />
       </TouchableOpacity>
+
+      {/* Voice Agent Modal */}
+      <Modal
+        visible={showVoiceAgent}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowVoiceAgent(false)}
+      >
+        <View style={styles.voiceAgentOverlay}>
+          <View style={styles.voiceAgentContainer}>
+            {/* Header */}
+            <View style={styles.voiceAgentHeader}>
+              <View style={styles.voiceAgentHeaderLeft}>
+                <Ionicons name="mic" size={20} color="#333" />
+                <Text style={styles.voiceAgentTitle}>Dixie Voice Agent</Text>
+              </View>
+              <TouchableOpacity 
+                onPress={() => setShowVoiceAgent(false)}
+                style={styles.voiceAgentCloseButton}
+              >
+                <Ionicons name="close" size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Listening Status */}
+            {isListening && (
+              <View style={styles.listeningStatusContainer}>
+                <View style={styles.listeningIndicator}>
+                  {listeningAnimation && (
+                    <Animated.View 
+                      style={[
+                        styles.listeningWave,
+                        {
+                          transform: [{ scale: pulseAnim }]
+                        }
+                      ]}
+                    />
+                  )}
+                  <Ionicons 
+                    name="mic" 
+                    size={32} 
+                    color={listeningAnimation ? "#ff4444" : "#4285F4"} 
+                  />
+                </View>
+                <Text style={styles.listeningText}>
+                  {listeningAnimation ? "Listening..." : "Ready to listen"}
+                </Text>
+              </View>
+            )}
+
+            {/* Voice Transcript */}
+            {voiceText && (
+              <View style={styles.voiceTranscriptContainer}>
+                <Text style={styles.voiceTranscriptLabel}>Transcript:</Text>
+                <Text style={styles.voiceTranscriptText}>{voiceText}</Text>
+              </View>
+            )}
+
+            {/* Agent Response */}
+            {agentResponse && (
+              <View style={styles.agentResponseContainer}>
+                <Text style={styles.agentResponseLabel}>Dixie:</Text>
+                <Text style={styles.agentResponseText}>{agentResponse}</Text>
+              </View>
+            )}
+
+            {/* Debug Info */}
+            <View style={{padding: 10, backgroundColor: '#f0f0f0', marginTop: 10}}>
+              <Text style={{fontSize: 12, color: '#666'}}>
+                Debug: agentResponse="{agentResponse}" | isAgentProcessing={isAgentProcessing.toString()}
+              </Text>
+            </View>
+
+            {/* Instructions */}
+            {!isListening && !voiceText && !agentResponse && (
+              <View style={styles.voiceAgentInstructions}>
+                <Text style={styles.voiceAgentInstructionsText}>
+                  Voice agent ready! Tap the mic to start listening.
+                </Text>
+              </View>
+            )}
+
+            {/* Input Area */}
+            <View style={styles.voiceAgentInputContainer}>
+              <TouchableOpacity 
+                onPress={isListening ? stopListening : startListening}
+                style={[
+                  styles.voiceAgentMicButton, 
+                  isListening && styles.voiceAgentMicButtonListening,
+                  listeningAnimation && styles.voiceAgentMicButtonPulsing
+                ]}
+              >
+                <Ionicons 
+                  name={isListening ? "stop" : "mic"} 
+                  size={24} 
+                  color={isListening ? "#fff" : "#4285F4"} 
+                />
+              </TouchableOpacity>
+              
+              <TextInput
+                style={styles.voiceAgentTextInput}
+                placeholder="Type your command here..."
+                value={voiceInput}
+                onChangeText={setVoiceInput}
+                onSubmitEditing={handleVoiceInputSubmit}
+                placeholderTextColor="#999"
+              />
+              <TouchableOpacity 
+                onPress={handleVoiceInputSubmit}
+                style={styles.voiceAgentSendButton}
+                disabled={isAgentProcessing}
+              >
+                <Ionicons name="send" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Label Management Modal */}
       <Modal
@@ -1888,6 +2442,171 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 5,
+  },
+  voiceAgentContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 15,
+    zIndex: 1000,
+  },
+  voiceAgentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  voiceAgentHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  voiceAgentTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginLeft: 8,
+  },
+  voiceAgentCloseButton: {
+    padding: 5,
+  },
+  voiceAgentResponse: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+    minHeight: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  voiceAgentResponseText: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  voiceAgentLoading: {
+    marginTop: 10,
+  },
+  voiceAgentInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#e1e5e9',
+  },
+  voiceAgentMicButton: {
+    padding: 10,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  voiceAgentMicButtonListening: {
+    backgroundColor: '#FF4444',
+  },
+  voiceAgentMicButtonPulsing: {
+    backgroundColor: '#ff4444',
+  },
+  voiceAgentTextInput: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    marginHorizontal: 10,
+    fontSize: 16,
+    backgroundColor: '#fff',
+  },
+  voiceAgentSendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#4285F4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  listeningStatusContainer: {
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  listeningIndicator: {
+    position: 'relative',
+    marginBottom: 10,
+  },
+  listeningWave: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FF4444',
+    opacity: 0.3,
+    top: -14,
+    left: -14,
+  },
+  listeningText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '500',
+  },
+  voiceTranscriptContainer: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+  },
+  voiceTranscriptLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  voiceTranscriptText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  agentResponseContainer: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+  },
+  agentResponseLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  agentResponseText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  voiceAgentInstructions: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+  },
+  voiceAgentInstructionsText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  voiceAgentOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
 });
 

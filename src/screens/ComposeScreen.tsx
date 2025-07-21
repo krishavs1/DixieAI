@@ -1,25 +1,26 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   Alert,
   Modal,
   Image,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { AuthContext } from '../context/AuthContext';
-import { emailService } from '../services/emailService';
 import { useNavigation } from '@react-navigation/native';
+import { AuthContext } from '../context/AuthContext';
 import EmailRenderer from '../components/EmailRenderer';
+import * as Speech from 'expo-speech';
+import { emailService } from '../services/emailService';
 
 interface Attachment {
   id: string;
@@ -39,9 +40,154 @@ const ComposeScreen = ({ route }: any) => {
   const [originalMessage, setOriginalMessage] = useState<any>(null);
   const [isGeneratingReply, setIsGeneratingReply] = useState(false);
   const [replySource, setReplySource] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceText, setVoiceText] = useState('');
+  const [showVoiceInput, setShowVoiceInput] = useState(false);
+  const [showVoiceAgent, setShowVoiceAgent] = useState(false);
+  const [agentResponse, setAgentResponse] = useState('');
+  const [isAgentProcessing, setIsAgentProcessing] = useState(false);
   
   const { token } = useContext(AuthContext)!;
   const navigation = useNavigation();
+
+  // Voice Recognition Setup
+  useEffect(() => {
+    // Voice commands are now handled through text input
+    return () => {
+      // Cleanup if needed
+    };
+  }, []);
+
+  const onSpeechStart = () => {
+    setIsListening(true);
+    setVoiceText('');
+  };
+
+  const onSpeechEnd = () => {
+    setIsListening(false);
+  };
+
+  const onSpeechError = (error: any) => {
+    setIsListening(false);
+    console.error('Speech recognition error:', error);
+    Alert.alert('Voice Error', 'Failed to recognize speech. Please try again.');
+  };
+
+  const onSpeechResults = (event: any) => {
+    const results = event.value;
+    if (results && results.length > 0) {
+      const recognizedText = results[0];
+      setVoiceText(recognizedText);
+      processVoiceCommand(recognizedText);
+    }
+  };
+
+  const onSpeechPartialResults = (event: any) => {
+    const results = event.value;
+    if (results && results.length > 0) {
+      setVoiceText(results[0]);
+    }
+  };
+
+  const startListening = async () => {
+    try {
+      setShowVoiceAgent(true);
+      setIsListening(true);
+      setAgentResponse('');
+      speakFeedback('Voice agent ready. How can I help you?');
+    } catch (error) {
+      console.error('Error starting voice agent:', error);
+      Alert.alert('Voice Error', 'Failed to start voice agent.');
+    }
+  };
+
+  const stopListening = async () => {
+    try {
+      setShowVoiceAgent(false);
+      setIsListening(false);
+      setVoiceText('');
+      setAgentResponse('');
+    } catch (error) {
+      console.error('Error stopping voice agent:', error);
+    }
+  };
+
+  const processVoiceCommand = async (text: string) => {
+    const lowerText = text.toLowerCase();
+    
+    // Voice agent commands
+    if (lowerText.includes('summarize') && lowerText.includes('inbox')) {
+      await summarizeInbox();
+    } else if (lowerText.includes('close') || lowerText.includes('exit')) {
+      stopListening();
+      speakFeedback('Closing voice agent');
+    } else if (lowerText.includes('help')) {
+      setAgentResponse('I can help you with:\n• Summarize inbox\n• Close voice agent\n• Help with commands');
+      speakFeedback('Here are the available commands');
+    } else {
+      setAgentResponse('I heard: "' + text + '"\n\nI can help you summarize your inbox. Try saying "Summarize my inbox"');
+      speakFeedback('I can help you summarize your inbox');
+    }
+  };
+
+  const summarizeInbox = async () => {
+    setIsAgentProcessing(true);
+    setAgentResponse('Analyzing your inbox...');
+    
+    try {
+      // Call the email service to get inbox data
+      const response = await fetch('http://localhost:3000/api/email/threads', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const threads = data.threads || [];
+        
+        // Analyze inbox
+        const unreadCount = threads.filter((t: any) => t.isUnread).length;
+        const totalCount = threads.length;
+        const recentThreads = threads.slice(0, 5);
+        
+        const summary = `📧 Inbox Summary:\n\n` +
+          `• Total emails: ${totalCount}\n` +
+          `• Unread emails: ${unreadCount}\n` +
+          `• Recent emails: ${recentThreads.length}\n\n` +
+          `Recent emails:\n${recentThreads.map((t: any, i: number) => 
+            `${i + 1}. ${t.subject || 'No subject'} (${t.isUnread ? 'Unread' : 'Read'})`
+          ).join('\n')}`;
+        
+        setAgentResponse(summary);
+        speakFeedback(`You have ${unreadCount} unread emails out of ${totalCount} total emails`);
+      } else {
+        setAgentResponse('Sorry, I could not access your inbox at the moment.');
+        speakFeedback('Unable to access inbox');
+      }
+    } catch (error) {
+      console.error('Error summarizing inbox:', error);
+      setAgentResponse('Sorry, there was an error accessing your inbox.');
+      speakFeedback('Error accessing inbox');
+    } finally {
+      setIsAgentProcessing(false);
+    }
+  };
+
+  const handleVoiceInputSubmit = () => {
+    if (voiceText.trim()) {
+      processVoiceCommand(voiceText);
+      setVoiceText('');
+    }
+  };
+
+  const speakFeedback = (message: string) => {
+    Speech.speak(message, {
+      language: 'en',
+      pitch: 1.0,
+      rate: 0.9,
+    });
+  };
 
   // Helper function to strip HTML tags
   const stripHtmlTags = (html: string): string => {
@@ -412,34 +558,33 @@ Keep the reply under 100 words and make it sound natural and human-written.`;
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header with Action Buttons */}
+        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={handleCancel} style={styles.headerButton}>
-              <Ionicons name="close" size={24} color="#666" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => setShowAttachmentMenu(true)} 
-              style={styles.headerButton}
-            >
-              <Ionicons name="attach" size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={handleCancel} style={styles.headerButton}>
+            <Ionicons name="close" size={24} color="#333" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity onPress={() => setShowAttachmentMenu(true)} style={styles.headerButton}>
+            <Ionicons name="attach" size={24} color="#333" />
+          </TouchableOpacity>
           
           <Text style={styles.headerTitle}>
-            {route.params?.replyData ? 'Reply' : 'New Message'}
+            {route.params?.replyData ? 'Reply' : route.params?.forwardData ? 'Forward' : 'Compose'}
           </Text>
           
           <TouchableOpacity 
-            onPress={handleSend} 
-            style={[styles.sendButton, isSending && styles.sendButtonDisabled]}
-            disabled={isSending}
+            onPress={isListening ? stopListening : startListening} 
+            style={[styles.headerButton, isListening && styles.voiceButtonActive]}
           >
             <Ionicons 
-              name="send" 
-              size={20} 
-              color={isSending ? '#ccc' : '#4285F4'} 
+              name={isListening ? "mic" : "mic-outline"} 
+              size={24} 
+              color={isListening ? "#FF4444" : "#333"} 
             />
+          </TouchableOpacity>
+          
+          <TouchableOpacity onPress={handleSend} style={styles.sendButton}>
+            <Ionicons name="send" size={24} color="#4285F4" />
           </TouchableOpacity>
         </View>
 
@@ -513,6 +658,16 @@ Keep the reply under 100 words and make it sound natural and human-written.`;
                 />
                 <Text style={[styles.replySourceText, { color: replySource === 'openai' ? "#4CAF50" : "#FF9800" }]}>
                   {replySource === 'openai' ? 'AI Generated' : 'Template Generated'}
+                </Text>
+              </View>
+            )}
+            
+            {/* Voice Feedback Display */}
+            {isListening && (
+              <View style={styles.voiceFeedbackContainer}>
+                <Ionicons name="mic" size={20} color="#FF4444" />
+                <Text style={styles.voiceFeedbackText}>
+                  {voiceText || 'Listening...'}
                 </Text>
               </View>
             )}
@@ -612,6 +767,99 @@ Keep the reply under 100 words and make it sound natural and human-written.`;
             </View>
           </TouchableOpacity>
         </Modal>
+
+        {/* Voice Input Modal */}
+        <Modal
+          visible={showVoiceInput}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowVoiceInput(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.voiceInputModal}>
+              <Text style={styles.voiceInputTitle}>Voice Commands</Text>
+              <Text style={styles.voiceInputSubtitle}>Type your command or email content:</Text>
+              
+              <TextInput
+                style={styles.voiceInputField}
+                value={voiceText}
+                onChangeText={setVoiceText}
+                placeholder="e.g., 'send email' or 'Hello, this is a test message'"
+                placeholderTextColor="#999"
+                multiline
+                autoFocus
+                onSubmitEditing={handleVoiceInputSubmit}
+              />
+              
+              <View style={styles.voiceInputButtons}>
+                <TouchableOpacity 
+                  style={styles.voiceInputButton}
+                  onPress={() => setShowVoiceInput(false)}
+                >
+                  <Text style={styles.voiceInputButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.voiceInputButton, styles.voiceInputButtonPrimary]}
+                  onPress={handleVoiceInputSubmit}
+                >
+                  <Text style={[styles.voiceInputButtonText, styles.voiceInputButtonTextPrimary]}>
+                    Execute
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Voice Agent UI - Bottom Panel */}
+        {showVoiceAgent && (
+          <View style={styles.voiceAgentContainer}>
+            <View style={styles.voiceAgentHeader}>
+              <View style={styles.voiceAgentTitleRow}>
+                <Ionicons name="mic" size={20} color="#4285F4" />
+                <Text style={styles.voiceAgentTitle}>Dixie Voice Agent</Text>
+                <TouchableOpacity onPress={stopListening} style={styles.voiceAgentCloseButton}>
+                  <Ionicons name="close" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.voiceAgentSubtitle}>
+                {isListening ? 'Listening...' : 'Ready to help'}
+              </Text>
+            </View>
+            
+            <View style={styles.voiceAgentContent}>
+              {agentResponse ? (
+                <ScrollView style={styles.agentResponseContainer}>
+                  <Text style={styles.agentResponseText}>{agentResponse}</Text>
+                </ScrollView>
+              ) : (
+                <View style={styles.voiceAgentPrompt}>
+                  <Text style={styles.voiceAgentPromptText}>
+                    Try saying: "Summarize my inbox"
+                  </Text>
+                </View>
+              )}
+            </View>
+            
+            <View style={styles.voiceAgentInput}>
+              <TextInput
+                style={styles.voiceAgentInputField}
+                value={voiceText}
+                onChangeText={setVoiceText}
+                placeholder="Type your command here..."
+                placeholderTextColor="#999"
+                onSubmitEditing={handleVoiceInputSubmit}
+              />
+              <TouchableOpacity 
+                style={styles.voiceAgentSendButton}
+                onPress={handleVoiceInputSubmit}
+              >
+                <Ionicons name="send" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -632,29 +880,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#f0f0f0',
     backgroundColor: '#fff',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
   },
   headerButton: {
     padding: 8,
-    marginRight: 8,
+    borderRadius: 8,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
-    flex: 2,
+    flex: 1,
     textAlign: 'center',
   },
   sendButton: {
     padding: 8,
-    flex: 1,
-    alignItems: 'flex-end',
+    borderRadius: 8,
   },
   sendButtonDisabled: {
     opacity: 0.5,
@@ -839,6 +1081,211 @@ const styles = StyleSheet.create({
     marginLeft: 5,
     fontSize: 13,
     fontWeight: '500',
+  },
+  voiceButtonActive: {
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  voiceFeedbackContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  voiceFeedbackText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  voiceHelpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  voiceHelpText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  voiceCommandsModal: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 20,
+    width: '80%',
+    alignItems: 'center',
+  },
+  voiceCommandsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 15,
+  },
+  voiceCommandsList: {
+    width: '100%',
+  },
+  voiceCommandItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  voiceCommandText: {
+    marginLeft: 15,
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  voiceInputModal: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 20,
+    width: '80%',
+    alignItems: 'center',
+  },
+  voiceInputTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 5,
+  },
+  voiceInputSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  voiceInputField: {
+    width: '100%',
+    height: 100,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 16,
+    color: '#333',
+    textAlignVertical: 'top',
+    marginBottom: 15,
+  },
+  voiceInputButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+  },
+  voiceInputButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#4285F4',
+  },
+  voiceInputButtonText: {
+    fontSize: 16,
+    color: '#4285F4',
+    fontWeight: '600',
+  },
+  voiceInputButtonPrimary: {
+    backgroundColor: '#4285F4',
+    borderColor: '#4285F4',
+  },
+  voiceInputButtonTextPrimary: {
+    color: '#fff',
+  },
+  voiceAgentContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  voiceAgentHeader: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  voiceAgentTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  voiceAgentTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+    marginLeft: 10,
+  },
+  voiceAgentCloseButton: {
+    padding: 5,
+  },
+  voiceAgentSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  voiceAgentContent: {
+    flex: 1,
+    marginBottom: 15,
+  },
+  agentResponseContainer: {
+    maxHeight: 150, // Limit height for scrolling
+  },
+  agentResponseText: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 20,
+  },
+  voiceAgentPrompt: {
+    alignItems: 'center',
+    padding: 10,
+  },
+  voiceAgentPromptText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  voiceAgentInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  voiceAgentInputField: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    paddingVertical: 5,
+  },
+  voiceAgentSendButton: {
+    padding: 10,
+    borderRadius: 15,
+    backgroundColor: '#4285F4',
+    marginLeft: 5,
   },
 });
 
