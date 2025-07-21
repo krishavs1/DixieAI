@@ -6,7 +6,9 @@ A React Native mobile app that provides AI-powered email management using Gmail 
 
 - 🔐 **Google Sign-In** - Secure authentication with Gmail
 - 📧 **Email Management** - View, search, and manage email threads
-- 🤖 **AI Integration** - AI-powered email processing and responses
+- 🤖 **AI-Powered Replies** - Generate intelligent, contextual email replies using OpenAI GPT-4
+- 🎯 **Smart Context Analysis** - AI understands email content and generates appropriate responses
+- 🔄 **Fallback System** - Template-based replies when AI service is unavailable
 - 🌙 **Dark Mode** - Beautiful dark and light themes
 - 📱 **Cross Platform** - Works on iOS and Android
 
@@ -83,6 +85,13 @@ npm start
    - Copy `.env.example` to `.env` in the backend folder
    - Add your Google OAuth credentials
    - Set your JWT secret
+   - Add your OpenAI API key for AI-powered replies
+
+3. **OpenAI API Setup**
+   - Get an API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+   - Add `OPENAI_API_KEY=your_api_key_here` to your backend `.env` file
+   - The AI reply feature will use GPT-4o-mini for intelligent email responses
+   - If no API key is provided, the app will use template-based fallback replies
 
 ## Development
 

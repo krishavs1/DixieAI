@@ -1,199 +1,156 @@
 import express from 'express';
-import OpenAI from 'openai';
-import { logger } from '../utils/logger';
 import { authMiddleware } from '../middleware/auth';
+import { logger } from '../utils/logger';
 import { z } from 'zod';
-
-interface AuthRequest extends express.Request {
-  user?: any;
-}
+import OpenAI from 'openai';
 
 const router = express.Router();
 
+// Initialize OpenAI client
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-development',
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Schema for AI requests
-const summarizeSchema = z.object({
-  content: z.string(),
-  type: z.enum(['thread', 'email']).default('thread'),
+// Schema for AI reply generation
+const generateReplySchema = z.object({
+  prompt: z.string(),
+  context: z.object({
+    originalMessage: z.string(),
+    sender: z.string(),
+    subject: z.string(),
+  }),
 });
 
-const replySchema = z.object({
-  content: z.string(),
-  context: z.string().optional(),
-  tone: z.enum(['professional', 'casual', 'friendly']).default('professional'),
-});
-
-const querySchema = z.object({
-  question: z.string(),
-  context: z.string(),
-});
-
-// Summarize email or thread
-router.post('/summarize', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+// Generate AI-powered reply
+router.post('/generate-reply', authMiddleware, async (req: any, res: express.Response) => {
   try {
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dummy-key-for-development') {
-      return res.status(503).json({ error: 'OpenAI API key not configured' });
+    const { prompt, context } = generateReplySchema.parse(req.body);
+    
+    logger.info('Generating AI reply for:', context.subject);
+    
+    // Check if OpenAI API key is configured
+    if (!process.env.OPENAI_API_KEY) {
+      logger.warn('OpenAI API key not configured, using fallback reply');
+      const fallbackReply = generateContextualReply(context);
+      return res.json({
+        reply: fallbackReply,
+        success: true,
+        source: 'fallback',
+      });
     }
     
-    const { content, type } = summarizeSchema.parse(req.body);
-    
-    const prompt = type === 'thread' 
-      ? `Please summarize this email thread concisely, highlighting the key points, decisions, and any action items:\n\n${content}`
-      : `Please summarize this email, highlighting the main points and any action items:\n\n${content}`;
+    // Create a more sophisticated prompt for OpenAI
+    const systemPrompt = `You are an intelligent email assistant that helps users write professional, contextual replies to emails. 
+
+Your task is to generate a natural, human-like reply that:
+1. Acknowledges the original message appropriately
+2. Provides a relevant and helpful response
+3. Maintains a professional but friendly tone
+4. Sounds like it was written by a real person, not an AI
+5. Is concise (under 100 words) but complete
+6. Matches the context and urgency of the original message
+7. ONLY generates the email body content - DO NOT include subject lines, headers, or metadata
+
+IMPORTANT: Generate ONLY the email body content. Do not include:
+- Subject lines (like "Re: Follow up ⏰")
+- "From:" or "To:" headers
+- Date/time information
+- Any other email metadata
+
+Start directly with the greeting and end with the signature.`;
+
+    const userPrompt = `Please generate ONLY the email body content for this reply:
+
+Original Email:
+From: ${context.sender}
+Subject: ${context.subject}
+Content: ${context.originalMessage}
+
+Generate a natural, professional email body that would be appropriate for this context. Start with a greeting and end with a signature. Do not include any subject lines or headers.`;
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'You are Dixie, an AI email assistant. Provide clear, concise summaries that help users quickly understand their emails. Focus on key information, decisions, and action items.',
+          content: systemPrompt,
         },
         {
           role: 'user',
-          content: prompt,
+          content: userPrompt,
         },
       ],
-      max_tokens: 500,
-      temperature: 0.3,
-    });
-
-    const summary = response.choices[0]?.message?.content || '';
-    
-    return res.json({ summary });
-  } catch (error) {
-    logger.error('Error generating summary:', error);
-    return res.status(500).json({ error: 'Failed to generate summary' });
-  }
-});
-
-// Generate reply suggestion
-router.post('/reply', authMiddleware, async (req: AuthRequest, res: express.Response) => {
-  try {
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dummy-key-for-development') {
-      return res.status(503).json({ error: 'OpenAI API key not configured' });
-    }
-    
-    const { content, context, tone } = replySchema.parse(req.body);
-    
-    const toneInstructions = {
-      professional: 'Use a professional, business-appropriate tone.',
-      casual: 'Use a casual, friendly tone.',
-      friendly: 'Use a warm, friendly tone while maintaining professionalism.',
-    };
-
-    const prompt = `Please draft a reply to this email. ${toneInstructions[tone]} Keep it concise and appropriate.
-    
-    ${context ? `Context: ${context}\n\n` : ''}
-    
-    Original email:
-    ${content}`;
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are Dixie, an AI email assistant. Generate helpful, appropriate email replies that match the requested tone and context. Always be respectful and professional.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      max_tokens: 300,
+      max_tokens: 200,
       temperature: 0.7,
     });
 
-    const reply = response.choices[0]?.message?.content || '';
+    const reply = response.choices[0]?.message?.content?.trim() || '';
     
-    return res.json({ reply });
-  } catch (error) {
-    logger.error('Error generating reply:', error);
-    return res.status(500).json({ error: 'Failed to generate reply' });
-  }
-});
-
-// Answer questions about emails
-router.post('/query', authMiddleware, async (req: AuthRequest, res: express.Response) => {
-  try {
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dummy-key-for-development') {
-      return res.status(503).json({ error: 'OpenAI API key not configured' });
+    if (reply) {
+      logger.info('Successfully generated AI reply');
+      return res.json({
+        reply,
+        success: true,
+        source: 'openai',
+      });
+    } else {
+      throw new Error('No reply generated from OpenAI');
     }
     
-    const { question, context } = querySchema.parse(req.body);
-    
-    const prompt = `Based on the following email context, please answer this question: ${question}
-    
-    Email context:
-    ${context}`;
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are Dixie, an AI email assistant. Answer questions about emails based on the provided context. Be accurate and helpful. If you cannot answer based on the context, say so.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      max_tokens: 400,
-      temperature: 0.3,
-    });
-
-    const answer = response.choices[0]?.message?.content || '';
-    
-    return res.json({ answer });
   } catch (error) {
-    logger.error('Error answering query:', error);
-    return res.status(500).json({ error: 'Failed to answer query' });
-  }
-});
-
-// Chat with AI assistant
-router.post('/chat', authMiddleware, async (req: AuthRequest, res: express.Response) => {
-  try {
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dummy-key-for-development') {
-      return res.status(503).json({ error: 'OpenAI API key not configured' });
+    logger.error('Error generating AI reply:', error);
+    
+    // Fallback to template-based reply
+    try {
+      const fallbackReply = generateContextualReply(req.body.context);
+      return res.json({
+        reply: fallbackReply,
+        success: true,
+        source: 'fallback',
+        error: 'AI service unavailable, using fallback',
+      });
+    } catch (fallbackError) {
+      logger.error('Fallback reply generation failed:', fallbackError);
+      return res.status(500).json({ 
+        error: 'Failed to generate reply',
+        success: false,
+      });
     }
-    
-    const { messages, context } = req.body;
-    
-    const systemMessage = {
-      role: 'system',
-      content: `You are Dixie, an intelligent AI email assistant. You help users manage their emails through natural conversation.
-      
-      ${context ? `Current email context: ${context}` : ''}
-      
-      You can help with:
-      - Summarizing emails and threads
-      - Drafting replies
-      - Answering questions about email content
-      - Organizing and managing emails
-      - Scheduling and task extraction
-      
-      Be helpful, concise, and conversational. Always maintain a friendly but professional tone.`,
-    };
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [systemMessage, ...messages],
-      max_tokens: 500,
-      temperature: 0.7,
-    });
-
-    const reply = response.choices[0]?.message?.content || '';
-    
-    return res.json({ reply });
-  } catch (error) {
-    logger.error('Error in AI chat:', error);
-    return res.status(500).json({ error: 'Failed to process chat' });
   }
 });
+
+// Simple contextual reply generator (fallback)
+function generateContextualReply(context: any): string {
+  const { originalMessage, sender, subject } = context;
+  const content = originalMessage.toLowerCase();
+  
+  // Analyze the content and generate appropriate replies
+  if (content.includes('thank you') || content.includes('thanks')) {
+    return "You're welcome! I'm glad I could help. Let me know if you need anything else.";
+  }
+  
+  if (content.includes('meeting') || content.includes('schedule') || content.includes('appointment')) {
+    return "Thank you for reaching out about the meeting. I'll review the details and confirm my availability. I'll get back to you shortly with my response.";
+  }
+  
+  if (content.includes('project') || content.includes('deadline') || content.includes('timeline')) {
+    return "Thanks for the project update. I've reviewed the information and will follow up with any questions or next steps. I appreciate you keeping me in the loop.";
+  }
+  
+  if (content.includes('question') || content.includes('help') || content.includes('assistance')) {
+    return "Thank you for your question. I'll look into this and provide a detailed response soon. I want to make sure I give you the most accurate and helpful information.";
+  }
+  
+  if (content.includes('urgent') || content.includes('asap') || content.includes('important')) {
+    return "I understand this is urgent. I'll prioritize this and get back to you as soon as possible. Thank you for bringing this to my attention.";
+  }
+  
+  if (content.includes('good') || content.includes('great') || content.includes('excellent')) {
+    return "That's great to hear! I'm glad everything is working out well. Keep me updated on any further developments.";
+  }
+  
+  // Default professional reply
+  return "Thank you for your email. I've received your message and will review it carefully. I'll respond with a detailed reply shortly. I appreciate you reaching out.";
+}
 
 export default router; 

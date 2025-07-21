@@ -37,6 +37,8 @@ const ComposeScreen = ({ route }: any) => {
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [originalMessage, setOriginalMessage] = useState<any>(null);
+  const [isGeneratingReply, setIsGeneratingReply] = useState(false);
+  const [replySource, setReplySource] = useState<string | null>(null);
   
   const { token } = useContext(AuthContext)!;
   const navigation = useNavigation();
@@ -49,6 +51,94 @@ const ComposeScreen = ({ route }: any) => {
   // Helper function to check if content is HTML
   const isHtmlContent = (content: string): boolean => {
     return /<[^>]*>/.test(content);
+  };
+
+  // AI Reply Generation Function
+  const generateAIReply = async () => {
+    if (!originalMessage || isGeneratingReply) return;
+    
+    setIsGeneratingReply(true);
+    
+    try {
+      // Create a prompt for the AI based on the original message
+      const originalContent = originalMessage.body || originalMessage.snippet || originalMessage.plainTextContent || '';
+      const strippedContent = stripHtmlTags(originalContent);
+      
+      const prompt = `You are an AI email assistant. Generate a professional, contextual reply to this email:
+
+Original Email:
+From: ${originalMessage.from}
+Subject: ${originalMessage.subject}
+Content: ${strippedContent}
+
+Please generate a concise, professional reply that:
+1. Acknowledges the original message
+2. Provides a relevant response
+3. Maintains a professional tone
+4. Is appropriate for the context
+
+Keep the reply under 100 words and make it sound natural and human-written.`;
+
+      // Call the AI service (you'll need to implement this endpoint)
+      const response = await fetch('http://localhost:3000/api/ai/generate-reply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          prompt,
+          context: {
+            originalMessage: strippedContent,
+            sender: originalMessage.from,
+            subject: originalMessage.subject,
+          }
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBody(data.reply || 'Thank you for your email. I will get back to you soon.');
+        setReplySource(data.source || null);
+        
+        // Log the source of the generated reply
+        if (data.source) {
+          console.log(`Reply generated using: ${data.source}`);
+        }
+      } else {
+        // Fallback to a simple template-based reply
+        const fallbackReply = generateFallbackReply(originalMessage);
+        setBody(fallbackReply);
+        setReplySource('fallback');
+      }
+    } catch (error) {
+      console.error('Error generating AI reply:', error);
+      // Fallback to a simple template-based reply
+      const fallbackReply = generateFallbackReply(originalMessage);
+      setBody(fallbackReply);
+      setReplySource('fallback');
+    } finally {
+      setIsGeneratingReply(false);
+    }
+  };
+
+  // Fallback reply generator for when AI service is unavailable
+  const generateFallbackReply = (message: any): string => {
+    const content = message.body || message.snippet || message.plainTextContent || '';
+    const strippedContent = stripHtmlTags(content).toLowerCase();
+    
+    // Simple keyword-based reply generation
+    if (strippedContent.includes('thank you') || strippedContent.includes('thanks')) {
+      return "You're welcome! Let me know if you need anything else.";
+    } else if (strippedContent.includes('meeting') || strippedContent.includes('schedule')) {
+      return "Thank you for reaching out. I'll review the details and get back to you shortly.";
+    } else if (strippedContent.includes('project') || strippedContent.includes('deadline')) {
+      return "Thanks for the update. I'll review this and follow up with any questions.";
+    } else if (strippedContent.includes('question') || strippedContent.includes('help')) {
+      return "Thank you for your question. I'll look into this and provide a detailed response soon.";
+    } else {
+      return "Thank you for your email. I've received your message and will respond in detail shortly.";
+    }
   };
 
   // Handle forward data if passed as navigation parameter
@@ -395,6 +485,38 @@ const ComposeScreen = ({ route }: any) => {
               autoCapitalize="sentences"
             />
             
+            {/* AI Reply Generation Button */}
+            {originalMessage && (
+              <TouchableOpacity
+                style={[styles.aiButton, isGeneratingReply && styles.aiButtonDisabled]}
+                onPress={generateAIReply}
+                disabled={isGeneratingReply}
+              >
+                <Ionicons 
+                  name={isGeneratingReply ? "hourglass-outline" : "sparkles"} 
+                  size={16} 
+                  color={isGeneratingReply ? "#999" : "#4285F4"} 
+                />
+                <Text style={[styles.aiButtonText, isGeneratingReply && styles.aiButtonTextDisabled]}>
+                  {isGeneratingReply ? "Generating..." : "AI Reply"}
+                </Text>
+              </TouchableOpacity>
+            )}
+            
+            {/* Reply Source Indicator */}
+            {replySource && (
+              <View style={styles.replySourceContainer}>
+                <Ionicons 
+                  name={replySource === 'openai' ? "checkmark-circle" : "information-circle"} 
+                  size={14} 
+                  color={replySource === 'openai' ? "#4CAF50" : "#FF9800"} 
+                />
+                <Text style={[styles.replySourceText, { color: replySource === 'openai' ? "#4CAF50" : "#FF9800" }]}>
+                  {replySource === 'openai' ? 'AI Generated' : 'Template Generated'}
+                </Text>
+              </View>
+            )}
+            
             {/* Quoted Text for Replies */}
             {originalMessage && (
               <View style={styles.quotedTextContainer}>
@@ -547,12 +669,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+    minHeight: 44,
   },
   fieldLabel: {
     fontSize: 16,
     fontWeight: '500',
     color: '#333',
-    width: 60,
+    width: 70,
   },
   textInput: {
     flex: 1,
@@ -677,6 +800,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#555',
     lineHeight: 20,
+  },
+  aiButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e0e0e0',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  aiButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.7,
+  },
+  aiButtonText: {
+    marginLeft: 5,
+    fontSize: 14,
+    color: '#4285F4',
+    fontWeight: '600',
+  },
+  aiButtonTextDisabled: {
+    color: '#999',
+  },
+  replySourceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  replySourceText: {
+    marginLeft: 5,
+    fontSize: 13,
+    fontWeight: '500',
   },
 });
 
