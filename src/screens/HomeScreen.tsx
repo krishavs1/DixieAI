@@ -67,6 +67,8 @@ const HomeScreen = () => {
   const isListeningRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useState(new Animated.Value(-300))[0];
+  // Add a ref to store the final recognized text
+  const finalRecognizedTextRef = useRef<string>('');
 
   if (!authContext) {
     throw new Error('HomeScreen must be used within AuthProvider');
@@ -569,6 +571,7 @@ const HomeScreen = () => {
   const onSpeechStart = (event: any) => {
     console.log('Speech recognition started:', event);
     setVoiceText('Listening...');
+    finalRecognizedTextRef.current = ''; // Reset the final text
   };
 
   const onSpeechEnd = (event: any) => {
@@ -596,10 +599,11 @@ const HomeScreen = () => {
             }
           }
           
-          // Process the command with the current voiceText
-          console.log('🔥 Processing FINAL transcript after manual timeout:', voiceText);
-          if (voiceText && voiceText !== 'Listening...') {
-            processVoiceCommand(voiceText);
+          // Process the command with the final recognized text from ref
+          const finalText = finalRecognizedTextRef.current || voiceText;
+          console.log('🔥 Processing FINAL transcript after manual timeout:', finalText);
+          if (finalText && finalText !== 'Listening...') {
+            processVoiceCommand(finalText);
           }
         }
       }, 1000);
@@ -645,6 +649,9 @@ const HomeScreen = () => {
       // Update the transcript with the recognized text
       setVoiceText(recognizedText);
       
+      // Store the final recognized text in the ref
+      finalRecognizedTextRef.current = recognizedText;
+      
       // Clear any existing silence timeout
       if (silenceTimeout) {
         clearTimeout(silenceTimeout);
@@ -670,10 +677,11 @@ const HomeScreen = () => {
             }
           }
           
-          // Process the command with the recognized text directly (not relying on state)
-          console.log('🔥 Processing FINAL transcript after silence timeout:', recognizedText);
-          if (recognizedText && recognizedText !== 'Listening...') {
-            processVoiceCommand(recognizedText);
+          // Process the command with the final recognized text from ref
+          const finalText = finalRecognizedTextRef.current;
+          console.log('🔥 Processing FINAL transcript after silence timeout:', finalText);
+          if (finalText && finalText !== 'Listening...') {
+            processVoiceCommand(finalText);
           }
         }
       }, 2500); // 2.5 second silence timeout
@@ -1557,13 +1565,6 @@ const HomeScreen = () => {
                 <Text style={styles.agentResponseText}>{agentResponse}</Text>
               </View>
             )}
-
-            {/* Debug Info */}
-            <View style={{padding: 10, backgroundColor: '#f0f0f0', marginTop: 10}}>
-              <Text style={{fontSize: 12, color: '#666'}}>
-                Debug: agentResponse="{agentResponse}" | isAgentProcessing={isAgentProcessing.toString()}
-              </Text>
-            </View>
 
             {/* Instructions */}
             {!isListening && !voiceText && !agentResponse && (
