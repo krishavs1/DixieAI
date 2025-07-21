@@ -80,6 +80,22 @@ export function processEmailHtml({ html, shouldLoadImages, theme = 'light' }: Pr
     .replace(/<[^>]*style="[^"]*font-size:\s*0[^"]*"[^>]*>[\s\S]*?<\/[^>]*>/gi, '')
     .replace(/<[^>]*style="[^"]*opacity:\s*0[^"]*"[^>]*>[\s\S]*?<\/[^>]*>/gi, '');
 
+  // Preserve quoted text content - don't remove blockquotes or quoted sections
+  // Only remove truly hidden content, not quoted text
+  processedHtml = processedHtml
+    .replace(/<[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/[^>]*>/gi, '')
+    .replace(/<[^>]*style="[^"]*visibility:\s*hidden[^"]*"[^>]*>[\s\S]*?<\/[^>]*>/gi, '')
+    .replace(/<[^>]*style="[^"]*font-size:\s*0[^"]*"[^>]*>[\s\S]*?<\/[^>]*>/gi, '')
+    .replace(/<[^>]*style="[^"]*opacity:\s*0[^"]*"[^>]*>[\s\S]*?<\/[^>]*>/gi, '');
+
+  // Ensure blockquotes and quoted text are preserved
+  processedHtml = processedHtml
+    .replace(/<blockquote[^>]*>/gi, '<blockquote style="border-left: 4px solid #dadce0; margin: 8px 0; padding: 0 0 0 12px; color: #5f6368; font-size: 13px; line-height: 1.4;">')
+    .replace(/<div[^>]*style="[^"]*border-left[^"]*"[^>]*>/gi, (match) => {
+      // Preserve divs with border-left (quoted text indicators)
+      return match.replace(/style="([^"]*)"/, 'style="$1; border-left: 4px solid #dadce0; margin: 8px 0; padding: 0 0 0 12px; color: #5f6368; font-size: 13px; line-height: 1.4;"');
+    });
+
   // Process images based on shouldLoadImages setting
   if (!shouldLoadImages) {
     // Block external images but allow inline (base64) images
@@ -501,6 +517,33 @@ export function extractEmailBody(payload: any): string {
       const textPart = payload.parts.find((part: any) => part.mimeType === 'text/plain');
       if (textPart?.body?.data) {
         body = Buffer.from(textPart.body.data, 'base64').toString();
+      }
+    }
+    
+    // If we still don't have content, recursively check nested parts
+    if (!body) {
+      body = extractEmailBodyRecursive(payload.parts);
+    }
+  }
+  
+  return body;
+}
+
+function extractEmailBodyRecursive(parts: any[]): string {
+  let body = '';
+  
+  for (const part of parts) {
+    if (part.mimeType === 'text/html' && part.body?.data) {
+      body = Buffer.from(part.body.data, 'base64').toString();
+      break;
+    } else if (part.mimeType === 'text/plain' && part.body?.data && !body) {
+      // Use plain text as fallback
+      body = Buffer.from(part.body.data, 'base64').toString();
+    } else if (part.parts) {
+      // Recursively check nested parts
+      const nestedBody = extractEmailBodyRecursive(part.parts);
+      if (nestedBody && !body) {
+        body = nestedBody;
       }
     }
   }

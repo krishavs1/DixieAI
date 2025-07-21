@@ -16,7 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showMessage } from 'react-native-flash-message';
 import { API_CONFIG, clearBackendURLCache } from '../config/api';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 // Helper function to create a fetch with timeout
 const fetchWithTimeout = async (url: string, options: RequestInit, timeout: number = 30000) => {
@@ -79,17 +79,6 @@ const LoginScreen = () => {
   // Check backend connectivity on component mount
   useEffect(() => {
     checkBackendConnectivity();
-    
-    // Listen for network changes
-    // const unsubscribe = NetInfo.addEventListener(state => {
-    //   if (state.isConnected && state.isInternetReachable) {
-    //     console.log('�� Network connected, clearing backend cache and rechecking...');
-    //     clearBackendURLCache();
-    //     checkBackendConnectivity();
-    //   }
-    // });
-
-    // return () => unsubscribe();
   }, []);
 
   const checkBackendConnectivity = async () => {
@@ -248,70 +237,95 @@ const LoginScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       
-      {/* Logo Section */}
-        <View style={styles.logoContainer}>
-        <Image
-          source={require('../../assets/icon.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.title}>DixieAI</Text>
-        <Text style={styles.subtitle}>Your AI Email Assistant</Text>
+      {/* Background Gradient */}
+      <View style={styles.backgroundGradient}>
+        <View style={styles.gradientOverlay} />
       </View>
-
-      {/* Login Button */}
-      <View style={styles.loginContainer}>
-        <TouchableOpacity
-          style={[
-            styles.googleButton,
-            (loading || backendStatus === 'disconnected') && styles.disabledButton
-          ]}
-          onPress={handleGoogleLogin}
-          disabled={loading || backendStatus === 'disconnected'}
-        >
-          <Ionicons name="logo-google" size={24} color="#4285F4" />
-          <Text style={styles.googleButtonText}>
-            {loading ? 'Signing in...' : 'Sign in with Google'}
+      
+      {/* Decorative Elements */}
+      <View style={styles.decorativeCircle1} />
+      <View style={styles.decorativeCircle2} />
+      <View style={styles.decorativeCircle3} />
+      
+      {/* Main Content */}
+      <View style={styles.content}>
+        {/* Logo Section */}
+        <View style={styles.logoContainer}>
+          <View style={styles.logoWrapper}>
+            <Image
+              source={require('../../assets/images/DixieLogo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+              onError={(error) => console.log('Logo loading error:', error)}
+            />
+          </View>
+          <Text style={styles.title}>DixieAI</Text>
+          <Text style={styles.subtitle}>Your AI Email Assistant</Text>
+          <Text style={styles.description}>
+            Transform your email experience with intelligent organization and insights
           </Text>
-        </TouchableOpacity>
-        
-        {/* Backend Status Indicator */}
-        <View style={styles.statusContainer}>
-          <View style={[
-            styles.statusIndicator,
-            backendStatus === 'connected' && styles.statusConnected,
-            backendStatus === 'disconnected' && styles.statusDisconnected,
-            backendStatus === 'checking' && styles.statusChecking,
-          ]} />
-          <Text style={styles.statusText}>
-            {backendStatus === 'checking' && 'Checking server...'}
-            {backendStatus === 'connected' && 'Server connected'}
-            {backendStatus === 'disconnected' && 'Server disconnected'}
-          </Text>
-          <TouchableOpacity 
-            style={styles.refreshStatusButton} 
-            onPress={() => {
-              clearBackendURLCache();
-              checkBackendConnectivity();
-            }}
-          >
-            <Ionicons name="refresh" size={16} color="#666" />
-          </TouchableOpacity>
         </View>
-        
-        {backendStatus === 'disconnected' && (
-          <TouchableOpacity style={styles.retryButton} onPress={checkBackendConnectivity}>
-            <Text style={styles.retryButtonText}>Retry Connection</Text>
+
+        {/* Login Section */}
+        <View style={styles.loginContainer}>
+          <TouchableOpacity
+            style={[
+              styles.googleButton,
+              (loading || backendStatus === 'disconnected') && styles.disabledButton
+            ]}
+            onPress={handleGoogleLogin}
+            disabled={loading || backendStatus === 'disconnected'}
+          >
+            <View style={styles.googleIconContainer}>
+              <Ionicons name="logo-google" size={20} color="#4285F4" />
+            </View>
+            <Text style={styles.googleButtonText}>
+              {loading ? 'Signing in...' : 'Continue with Google'}
+            </Text>
+            {loading && <View style={styles.loadingSpinner} />}
           </TouchableOpacity>
-        )}
+          
+          {/* Backend Status Indicator */}
+          <View style={styles.statusContainer}>
+            <View style={[
+              styles.statusIndicator,
+              backendStatus === 'connected' && styles.statusConnected,
+              backendStatus === 'disconnected' && styles.statusDisconnected,
+              backendStatus === 'checking' && styles.statusChecking,
+            ]} />
+            <Text style={styles.statusText}>
+              {backendStatus === 'checking' && 'Checking server...'}
+              {backendStatus === 'connected' && 'Server connected'}
+              {backendStatus === 'disconnected' && 'Server disconnected'}
+            </Text>
+            <TouchableOpacity 
+              style={styles.refreshStatusButton} 
+              onPress={() => {
+                clearBackendURLCache();
+                checkBackendConnectivity();
+              }}
+            >
+              <Ionicons name="refresh" size={16} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          </View>
+          
+          {backendStatus === 'disconnected' && (
+            <TouchableOpacity style={styles.retryButton} onPress={checkBackendConnectivity}>
+              <Text style={styles.retryButtonText}>Retry Connection</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          By signing in, you agree to our Terms of Service and Privacy Policy
+          By continuing, you agree to our{' '}
+          <Text style={styles.footerLink}>Terms of Service</Text>
+          {' '}and{' '}
+          <Text style={styles.footerLink}>Privacy Policy</Text>
         </Text>
       </View>
     </View>
@@ -321,30 +335,104 @@ const LoginScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#0A0A0A',
+  },
+  backgroundGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#667eea',
+  },
+  gradientOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  decorativeCircle1: {
+    position: 'absolute',
+    top: -100,
+    right: -100,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  decorativeCircle2: {
+    position: 'absolute',
+    top: height * 0.3,
+    left: -50,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  decorativeCircle3: {
+    position: 'absolute',
+    bottom: height * 0.2,
+    right: -75,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  content: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
+    paddingTop: 60,
   },
   logoContainer: {
     alignItems: 'center',
     marginBottom: 80,
   },
-  logo: {
+  logoWrapper: {
     width: 120,
     height: 120,
-    marginBottom: 24,
+    borderRadius: 60,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 32,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  logo: {
+    width: 160,
+    height: 160,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    fontSize: 42,
+    fontWeight: '800',
+    color: '#ffffff',
+    marginBottom: 12,
+    textAlign: 'center',
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 20,
+    color: 'rgba(255,255,255,0.9)',
     textAlign: 'center',
+    marginBottom: 16,
+    fontWeight: '500',
+  },
+  description: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    lineHeight: 24,
+    maxWidth: 280,
   },
   loginContainer: {
     width: '100%',
@@ -354,82 +442,118 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 16,
+    paddingVertical: 18,
     paddingHorizontal: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  googleIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 2,
     },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    shadowRadius: 4,
+    elevation: 2,
   },
   googleButtonText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
     color: '#1a1a1a',
+    flex: 1,
+    textAlign: 'center',
+  },
+  loadingSpinner: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#4285F4',
+    borderTopColor: 'transparent',
+    marginLeft: 8,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  statusConnected: {
+    backgroundColor: '#4CAF50',
+  },
+  statusDisconnected: {
+    backgroundColor: '#F44336',
+  },
+  statusChecking: {
+    backgroundColor: '#FF9800',
+  },
+  statusText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  refreshStatusButton: {
     marginLeft: 12,
+    padding: 4,
+  },
+  retryButton: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignSelf: 'center',
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
+    backgroundColor: 'rgba(255,255,255,0.7)',
   },
   footer: {
     position: 'absolute',
     bottom: 50,
     paddingHorizontal: 32,
+    width: '100%',
   },
   footerText: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
   },
-  disabledButton: {
-    opacity: 0.7,
-    backgroundColor: '#e0e0e0',
-    borderColor: '#ccc',
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  statusIndicator: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 8,
-  },
-  statusConnected: {
-    backgroundColor: '#4CAF50', // Green
-  },
-  statusDisconnected: {
-    backgroundColor: '#F44336', // Red
-  },
-  statusChecking: {
-    backgroundColor: '#FF9800', // Orange
-  },
-  statusText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  refreshStatusButton: {
-    marginLeft: 10,
-  },
-  retryButton: {
-    backgroundColor: '#007bff',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    alignSelf: 'center',
-    marginTop: 10,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  footerLink: {
+    color: 'rgba(255,255,255,0.9)',
     fontWeight: '600',
   },
 });

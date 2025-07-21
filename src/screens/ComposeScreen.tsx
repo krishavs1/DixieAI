@@ -19,6 +19,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { AuthContext } from '../context/AuthContext';
 import { emailService } from '../services/emailService';
 import { useNavigation } from '@react-navigation/native';
+import EmailRenderer from '../components/EmailRenderer';
 
 interface Attachment {
   id: string;
@@ -35,9 +36,20 @@ const ComposeScreen = ({ route }: any) => {
   const [isSending, setIsSending] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [originalMessage, setOriginalMessage] = useState<any>(null);
   
   const { token } = useContext(AuthContext)!;
   const navigation = useNavigation();
+
+  // Helper function to strip HTML tags
+  const stripHtmlTags = (html: string): string => {
+    return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  };
+
+  // Helper function to check if content is HTML
+  const isHtmlContent = (content: string): boolean => {
+    return /<[^>]*>/.test(content);
+  };
 
   // Handle forward data if passed as navigation parameter
   React.useEffect(() => {
@@ -45,6 +57,18 @@ const ComposeScreen = ({ route }: any) => {
       const { forwardData } = route.params;
       setSubject(forwardData.subject || '');
       setBody(forwardData.body || '');
+    }
+    
+    if (route.params?.replyData) {
+      const { replyData } = route.params;
+      setTo(replyData.to || '');
+      setSubject(replyData.subject || '');
+      setBody(''); // Start with empty body for reply
+      setOriginalMessage(replyData.originalMessage); // Store the original message for quoting
+      
+      // Debug log to see what data we're getting
+      console.log('Reply data received:', replyData);
+      console.log('Original message:', replyData.originalMessage);
     }
   }, [route.params]);
 
@@ -242,6 +266,7 @@ const ComposeScreen = ({ route }: any) => {
         to: to.trim(),
         subject: subject.trim(),
         body: body.trim(),
+        threadId: route.params?.replyData?.threadId, // Include threadId for replies
         attachments: emailAttachments,
       });
       
@@ -311,7 +336,9 @@ const ComposeScreen = ({ route }: any) => {
             </TouchableOpacity>
           </View>
           
-          <Text style={styles.headerTitle}>New Message</Text>
+          <Text style={styles.headerTitle}>
+            {route.params?.replyData ? 'Reply' : 'New Message'}
+          </Text>
           
           <TouchableOpacity 
             onPress={handleSend} 
@@ -367,6 +394,26 @@ const ComposeScreen = ({ route }: any) => {
               textAlignVertical="top"
               autoCapitalize="sentences"
             />
+            
+            {/* Quoted Text for Replies */}
+            {originalMessage && (
+              <View style={styles.quotedTextContainer}>
+                <View style={styles.quotedTextHeader}>
+                  <Text style={styles.quotedTextHeaderText}>
+                    On {originalMessage.date ? new Date(originalMessage.date).toLocaleString() : 'Unknown date'} {originalMessage.from} wrote:
+                  </Text>
+                </View>
+                <View style={styles.quotedTextContent}>
+                  {isHtmlContent(originalMessage.body || originalMessage.snippet) ? (
+                    <EmailRenderer html={originalMessage.body || originalMessage.snippet} />
+                  ) : (
+                    <Text style={styles.quotedTextBody}>
+                      {originalMessage.body || originalMessage.snippet || originalMessage.plainTextContent || 'Original message content'}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
 
           {/* Attachments */}
@@ -603,6 +650,33 @@ const styles = StyleSheet.create({
   },
   removeAttachmentButton: {
     padding: 5,
+  },
+  quotedTextContainer: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  quotedTextHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  quotedTextHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  quotedTextContent: {
+    paddingLeft: 10,
+  },
+  quotedTextBody: {
+    fontSize: 14,
+    color: '#555',
+    lineHeight: 20,
   },
 });
 

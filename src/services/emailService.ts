@@ -38,6 +38,7 @@ export interface EmailThread {
 export interface EmailMessage {
   id: string;
   from: string;
+  fromRaw?: string; // Original "From" field for email extraction
   subject: string;
   date: string;
   body: string;

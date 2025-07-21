@@ -405,7 +405,7 @@ const HomeScreen = () => {
     
     // Generate inbox summary
     if (command.includes('summary') || command.includes('overview') || command.includes('analyze')) {
-      showMessage({
+    showMessage({
         message: '📊 Generating inbox summary...',
         type: 'success',
       });
@@ -418,8 +418,8 @@ const HomeScreen = () => {
       setSearchQuery('');
       showMessage({
         message: '🔍 Search cleared - use the search bar above',
-        type: 'info',
-      });
+      type: 'info',
+    });
     }
     
     // Show important emails
@@ -755,22 +755,22 @@ const HomeScreen = () => {
     }
     
     return (
-      <TouchableOpacity
+    <TouchableOpacity
         style={[
           styles.threadItem,
           item.read === false && styles.unreadThread
         ]}
-        onPress={() => handleThreadPress(item)}
+      onPress={() => handleThreadPress(item)}
         onLongPress={() => handleThreadLongPress(item)}
-      >
-        <View style={styles.threadHeader}>
+    >
+      <View style={styles.threadHeader}>
           <View style={styles.threadFromContainer}>
             <Text style={[
               styles.threadFrom,
               item.read === false ? styles.unreadText : styles.readText
             ]} numberOfLines={1}>
-              {item.from || 'Unknown'}
-            </Text>
+          {item.from || 'Unknown'}
+        </Text>
             {item.starred && <Ionicons name="star" size={16} color="#F9AB00" style={styles.starIcon} />}
             {item.important && <Ionicons name="flag" size={16} color="#FF6D01" style={styles.importantIcon} />}
           </View>
@@ -779,18 +779,18 @@ const HomeScreen = () => {
             item.read === false ? styles.unreadText : styles.readText
           ]}>
             {formatThreadTime(item.date)}
-          </Text>
-        </View>
+        </Text>
+      </View>
         <Text style={[
           styles.threadSubject,
           item.read === false ? styles.unreadText : styles.readText
         ]} numberOfLines={1}>
-          {item.subject}
-        </Text>
-        <Text style={styles.threadSnippet} numberOfLines={2}>
-          {item.snippet}
-        </Text>
-        <View style={styles.threadFooter}>
+        {item.subject}
+      </Text>
+      <Text style={styles.threadSnippet} numberOfLines={2}>
+        {item.snippet}
+      </Text>
+      <View style={styles.threadFooter}>
           <View style={styles.threadLabels}>
             {item.needsReply && (
               <View style={styles.needsReplyBadge}>
@@ -798,13 +798,13 @@ const HomeScreen = () => {
                 <Text style={styles.needsReplyText}>Reply</Text>
               </View>
             )}
-            {item.isImportant && (
+            {item.important && (
               <View style={styles.importantBadge}>
                 <Ionicons name="alert-circle" size={12} color="#fff" />
                 <Text style={styles.importantBadgeText}>Important</Text>
               </View>
             )}
-            {item.labels && item.labels.slice(0, 3).map((labelId) => {
+            {item.labels && item.labels.slice(0, 3).map(labelId => {
               const label = labels.find(l => l.id === labelId);
               return label ? (
                 <View key={labelId} style={[styles.threadLabel, { backgroundColor: label.color }]}>
@@ -816,15 +816,9 @@ const HomeScreen = () => {
               <Text style={styles.moreLabelText}>+{item.labels.length - 3}</Text>
             )}
           </View>
-          <TouchableOpacity 
-            style={styles.debugButton}
-            onPress={() => handleDebugEmail(item)}
-          >
-            <Ionicons name="code" size={16} color="#666" />
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
+      </View>
+    </TouchableOpacity>
+  );
   };
 
   const renderEmpty = () => (
@@ -969,7 +963,7 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-            {/* Header */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={toggleSidePanel} style={styles.menuButton}>
@@ -1004,7 +998,7 @@ const HomeScreen = () => {
 
           <TouchableOpacity onPress={generateInboxSummary} style={styles.summaryButton}>
             <Ionicons name="analytics" size={20} color="#34A853" />
-          </TouchableOpacity>
+        </TouchableOpacity>
           <TouchableOpacity onPress={() => processVoiceCommand('help')} style={styles.helpButton}>
             <Ionicons name="help-circle" size={20} color="#607D8B" />
           </TouchableOpacity>
@@ -1016,8 +1010,8 @@ const HomeScreen = () => {
             <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
               <Ionicons name="close-circle" size={16} color="#EA4335" />
               <Text style={styles.clearText}>Clear</Text>
-            </TouchableOpacity>
-          </View>
+        </TouchableOpacity>
+        </View>
         )}
 
       </View>

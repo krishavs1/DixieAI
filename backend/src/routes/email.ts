@@ -319,6 +319,7 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
         return {
           id: message.id,
           from: displayName,
+          fromRaw: from, // Add original "From" field for email extraction
           subject,
           date,
           body: processedResult.processedHtml,
@@ -335,6 +336,7 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
           return {
             id: message.id,
             from: extractDisplayName(headers.find(h => h.name === 'From')?.value || ''),
+            fromRaw: headers.find(h => h.name === 'From')?.value || '', // Add original "From" field
             subject: headers.find(h => h.name === 'Subject')?.value || '',
             date: headers.find(h => h.name === 'Date')?.value || '',
             body: he.decode(message.snippet || 'Message content could not be loaded'),

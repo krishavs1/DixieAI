@@ -81,14 +81,14 @@ h3 {
   line-height: 1.3;
   margin: 0 0 12px 0;
   color: #3c4043;
-}
+    }
 h4, h5, h6 {
   font-size: 14px;
   font-weight: 500;
   line-height: 1.3;
   margin: 0 0 10px 0;
   color: #3c4043;
-}
+    }
 
 /* Gmail-style emphasis */
 strong, b {
@@ -98,7 +98,7 @@ strong, b {
 em, i {
   font-style: italic;
   color: #3c4043;
-}
+    }
 
 /* Gmail-style lists */
 ul, ol {
@@ -110,7 +110,7 @@ li {
   font-size: 14px;
   line-height: 1.4;
   color: #3c4043;
-}
+    }
 
 /* Gmail-style tables */
 table {
@@ -186,6 +186,46 @@ details[open] summary {
 details > div {
   padding: 16px;
   background-color: #ffffff;
+}
+
+/* Show quoted text content by default */
+details {
+  display: block !important;
+}
+details > div {
+  display: block !important;
+  padding: 12px 16px !important;
+  background-color: #f8f9fa !important;
+  border-top: 1px solid #dadce0 !important;
+  color: #5f6368 !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+}
+
+/* Hide the summary element to show content directly */
+summary {
+  display: none !important;
+}
+
+/* Style quoted text content */
+blockquote {
+  border-left: 4px solid #dadce0;
+  margin: 8px 0;
+  padding: 0 0 0 12px;
+  color: #5f6368;
+  font-style: normal;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Handle Gmail-style quoted text */
+div[style*="border-left"] {
+  border-left: 4px solid #dadce0 !important;
+  margin: 8px 0 !important;
+  padding: 0 0 0 12px !important;
+  color: #5f6368 !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
 }
 
 /* Gmail-style code blocks */
@@ -285,8 +325,8 @@ img {
   max-width: 100% !important;
   height: auto !important;
   display: block !important;
-}
-
+    }
+    
 /* 3. Remove extra gutters on wrappers */
 .gmail-content,
 .gmail-content table,
@@ -295,7 +335,7 @@ img {
   margin: 0 auto !important;
   width: auto !important;
   max-width: 100% !important;
-}
+    }
 
 /* Additional email-specific resets */
 *[style*="border"] {

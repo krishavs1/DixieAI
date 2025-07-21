@@ -1,16 +1,16 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  SafeAreaView,
-  ActivityIndicator,
+  ScrollView,
   TextInput,
-  Alert,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  SafeAreaView,
+  ActivityIndicator,
   useWindowDimensions,
   useColorScheme,
   Image,
@@ -41,11 +41,19 @@ const EmailDetailScreen = () => {
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>('');
 
   const [expandedMessages, setExpandedMessages] = useState<{[key: string]: boolean}>({});
   const [attachmentData, setAttachmentData] = useState<{[key: string]: { [attachmentId: string]: string }}>({});
   
   const isDarkMode = colorScheme === 'dark';
+
+  useEffect(() => {
+    // Get user email from auth context
+    if (authContext?.user?.email) {
+      setUserEmail(authContext.user.email);
+    }
+  }, [authContext?.user]);
 
   useEffect(() => {
     fetchEmailThread();
@@ -187,7 +195,25 @@ const EmailDetailScreen = () => {
   };
 
   const stripHtmlTags = (html: string) => {
-    return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    if (!html) return '';
+    
+    // First, decode HTML entities
+    let text = html
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'");
+    
+    // Remove all HTML tags
+    text = text.replace(/<[^>]*>/g, '');
+    
+    // Clean up extra whitespace
+    text = text.replace(/\s+/g, ' ').trim();
+    
+    return text;
   };
 
   const isHtmlContent = (content: string) => {
@@ -200,6 +226,41 @@ const EmailDetailScreen = () => {
       return (names[0][0] + names[names.length - 1][0]).toUpperCase();
     }
     return name.slice(0, 2).toUpperCase();
+  };
+
+  const extractEmailAddress = (fromField: string): string => {
+    // Extract email from "Display Name <email@domain.com>" format
+    const emailMatch = fromField.match(/<(.+?)>/);
+    if (emailMatch) {
+      return emailMatch[1].trim();
+    }
+    
+    // If it's just an email address without display name
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (emailRegex.test(fromField)) {
+      return fromField.trim();
+    }
+    
+    // Fallback - return the original field
+    return fromField;
+  };
+
+  const isCurrentUser = (emailAddress: string): boolean => {
+    // Check if the email address matches the current user's email
+    if (!userEmail) return false;
+    
+    const messageEmail = emailAddress.toLowerCase();
+    const currentUserEmail = userEmail.toLowerCase();
+    
+    return messageEmail === currentUserEmail;
+  };
+
+  const getDisplayName = (message: EmailMessage): string => {
+    const emailAddress = extractEmailAddress(message.fromRaw || message.from);
+    if (isCurrentUser(emailAddress)) {
+      return 'me';
+    }
+    return message.from;
   };
 
   const renderMessageHeader = (message: EmailMessage, index: number, isExpanded: boolean) => {
@@ -222,13 +283,13 @@ const EmailDetailScreen = () => {
           <View style={styles.messageHeaderLeft}>
             <View style={[styles.avatar, isDarkMode && styles.avatarDark]}>
               <Text style={[styles.avatarText, isDarkMode && styles.avatarTextDark]}>
-                {getInitials(message.from)}
+                {getInitials(getDisplayName(message))}
               </Text>
             </View>
             <View style={styles.messageHeaderInfo}>
               <View style={styles.messageHeaderTopRow}>
                 <Text style={[styles.fromText, isDarkMode && styles.fromTextDark]} numberOfLines={1}>
-                  {message.from}
+                  {getDisplayName(message)}
                 </Text>
                 <Text style={[styles.dateText, isDarkMode && styles.dateTextDark]}>
                   {formatDate(message.date)}
@@ -351,26 +412,23 @@ const EmailDetailScreen = () => {
           {thread.subject}
         </Text>
         <TouchableOpacity
-          onPress={() => setShowReplyBox(true)}
-          style={styles.replyHeaderButton}
-        >
-          <Ionicons name="arrow-undo" size={24} color={isDarkMode ? '#8ab4f8' : '#1a73e8'} />
-        </TouchableOpacity>
-        <TouchableOpacity
           onPress={() => {
             const latestMessage = emailThread?.messages[emailThread.messages.length - 1];
             if (latestMessage) {
+              const emailAddress = extractEmailAddress(latestMessage.fromRaw || latestMessage.from);
               (navigation as any).navigate('Compose', {
-                forwardData: {
-                  subject: `Fwd: ${latestMessage.subject}`,
-                  body: `\n\n---------- Forwarded message ----------\nFrom: ${latestMessage.from}\nDate: ${formatDate(latestMessage.date)}\nSubject: ${latestMessage.subject}\n\n${latestMessage.body || latestMessage.snippet}`
+                replyData: {
+                  to: emailAddress,
+                  subject: `Re: ${latestMessage.subject}`,
+                  threadId: threadId,
+                  originalMessage: latestMessage
                 }
               });
             }
           }}
           style={styles.replyHeaderButton}
         >
-          <Ionicons name="arrow-redo" size={24} color={isDarkMode ? '#8ab4f8' : '#1a73e8'} />
+          <Ionicons name="arrow-undo" size={24} color={isDarkMode ? '#8ab4f8' : '#1a73e8'} />
         </TouchableOpacity>
       </View>
 
@@ -411,7 +469,8 @@ const EmailDetailScreen = () => {
                       backgroundColor: 'transparent',
                       borderTopWidth: 0,
                       padding: 0
-                    }
+                    },
+                    isDarkMode && styles.messageContentDark
                   ]}
                 >
                   <View style={styles.messageBody}>
@@ -608,18 +667,22 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   messageContent: {
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#f1f3f4',
     flex: 1,
     minHeight: 100,
   },
+  messageContentDark: {
+    backgroundColor: '#202124',
+    borderTopColor: '#5f6368',
+  },
   messageBody: {
     flex: 1,
     minHeight: 80,
+    paddingTop: 16,
+  },
+  messageBodyDark: {
+    borderTopColor: '#5f6368',
   },
   bodyText: {
     fontSize: 14,
