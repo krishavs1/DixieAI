@@ -89,6 +89,7 @@ const HomeScreen = () => {
   const [ignoreNextSpeechResult, setIgnoreNextSpeechResult] = useState(false);
   const wakeWordJustDetectedRef = useRef(false);
   const justStartedListeningRef = useRef(false);
+  const commandProcessedRef = useRef(false);
   
 
 
@@ -489,11 +490,21 @@ const HomeScreen = () => {
     console.log('Current thread state at start:', currentThread);
     console.log('Current sender state at start:', currentSender);
     
+    // Prevent duplicate command processing
+    if (commandProcessedRef.current) {
+      console.log('🚫 Command already processed, ignoring duplicate:', text);
+      return;
+    }
+    
     // Prevent multiple simultaneous command processing
     if (isProcessingCommand) {
       console.log('Already processing a command, ignoring:', text);
       return;
     }
+    
+    // Set command processed flag
+    commandProcessedRef.current = true;
+    console.log('🚫 Set commandProcessedRef to true');
     
     console.log('Setting processing flag to true');
     setIsProcessingCommand(true);
@@ -952,6 +963,9 @@ const HomeScreen = () => {
     
     // Reset wake word detection flag
     wakeWordJustDetectedRef.current = false;
+    
+    // Reset command processed flag
+    commandProcessedRef.current = false;
     
     // Restart background listening after closing voice agent
     setTimeout(() => {
