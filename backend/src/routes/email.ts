@@ -960,7 +960,7 @@ router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => 
 // Generate a reply for a specific thread
 router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { threadId, instruction, senderName } = req.body;
+    const { threadId, instruction } = req.body;
     
     if (!threadId || !instruction) {
       return res.status(400).json({ error: 'Thread ID and instruction are required' });
@@ -993,7 +993,7 @@ router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => 
       // Generate AI reply
       const replyContent = await AIService.generateContextualReply({
         originalEmail: {
-          from: fromHeader?.value || senderName || 'Unknown Sender',
+          from: fromHeader?.value || 'Unknown Sender',
           subject: subjectHeader?.value || 'No Subject',
           body: cleanBody,
         },
@@ -1006,7 +1006,7 @@ router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => 
         reply: replyContent,
         threadId: threadId,
         originalSubject: subjectHeader?.value || 'No Subject',
-        replyTo: fromHeader?.value || senderName || 'Unknown Sender',
+        replyTo: fromHeader?.value || 'Unknown Sender',
       });
 
     } catch (error: any) {
@@ -1068,7 +1068,7 @@ router.post('/generate-contextual-reply', authMiddleware, async (req: AuthReques
           subject: originalSubject,
           body: emailBody,
         },
-        instruction: "Generate a helpful and professional reply",
+        instruction: "Write a professional and contextual reply that acknowledges the email content and provides a helpful response. Be concise but complete.",
         userName: req.user.name || 'User',
       });
 

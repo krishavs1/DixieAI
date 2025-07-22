@@ -657,7 +657,6 @@ export const emailService = {
   generateReply: async (options: {
     threadId: string;
     instruction: string;
-    senderName?: string;
     token: string;
   }) => {
     try {
@@ -675,7 +674,6 @@ export const emailService = {
         body: JSON.stringify({
           threadId: options.threadId,
           instruction: options.instruction,
-          senderName: options.senderName,
         }),
       }, API_CONFIG.TIMEOUT);
 

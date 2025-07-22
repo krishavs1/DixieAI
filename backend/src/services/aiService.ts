@@ -6,6 +6,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Debug: Check if API key is loaded
+console.log('OpenAI API Key loaded:', process.env.OPENAI_API_KEY ? 'Yes' : 'No');
+
 export interface EmailClassification {
   needsReply: boolean;
   isImportant: boolean;
@@ -303,11 +306,14 @@ Your job is to:
 
 Rules:
 • Always start with an appropriate greeting (e.g., "Hi [Name]," or "Good morning [Name],")
-• Be concise but complete
+• Be concise but complete (2-4 sentences)
 • Match the formality level of the original email
 • End with "Best regards, ${userName}" or similar
 • Don't repeat the original email content
-• Focus on directly addressing what was asked in the instruction`;
+• Focus on directly addressing what was asked in the instruction
+• If the email is informational, acknowledge it and show understanding
+• If the email asks a question, provide a clear answer
+• If the email requires action, indicate your response or next steps`;
 
       const userPrompt = `Original email from ${originalEmail.from}:
 Subject: ${originalEmail.subject}
@@ -330,10 +336,11 @@ Write a professional reply following the user's instruction:`;
 
       const reply = response.choices[0]?.message?.content?.trim() || 'Sorry, I couldn\'t generate a reply. Please try again.';
       
-      logger.info(`Generated contextual reply for email from ${originalEmail.from}`);
+      logger.info(`Generated contextual reply for email from ${originalEmail.from}: ${reply.substring(0, 100)}...`);
       return reply;
     } catch (error) {
       logger.error('Error generating contextual reply:', error);
+      logger.error('Error details:', JSON.stringify(error, null, 2));
       return 'Sorry, I had trouble generating a reply. Please try again.';
     }
   }

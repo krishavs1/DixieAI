@@ -79,6 +79,10 @@ const HomeScreen = () => {
   const [pendingReply, setPendingReply] = useState<string>('');
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   
+  // Refs to persist thread context across voice agent sessions
+  const currentThreadRef = useRef<any>(null);
+  const currentSenderRef = useRef<string>('');
+  
 
 
   if (!authContext) {
@@ -437,6 +441,8 @@ const HomeScreen = () => {
     console.log('Text received:', text);
     console.log('Current voiceText state:', voiceText);
     console.log('Current state - isListening:', isListening, 'isProcessingCommand:', isProcessingCommand);
+    console.log('Current thread state at start:', currentThread);
+    console.log('Current sender state at start:', currentSender);
     
     // Prevent multiple simultaneous command processing
     if (isProcessingCommand) {
@@ -454,6 +460,15 @@ const HomeScreen = () => {
     console.log('Lowercase text:', lowerText);
     
     try {
+      // Debug: Log what we're checking for auto-reply
+      console.log('🔍 Auto-reply check:', {
+        hasWrite: lowerText.includes('write'),
+        hasReply: lowerText.includes('reply'),
+        hasThat: lowerText.includes('that'),
+        hasThis: lowerText.includes('this'),
+        fullText: lowerText
+      });
+      
       // 0. CONFIRMATION COMMAND - if we're awaiting confirmation
       if (awaitingConfirmation && (lowerText.includes('yes') || lowerText.includes('send') || lowerText.includes('okay') || lowerText.includes('ok'))) {
         console.log('✅ DETECTED YES CONFIRMATION - Sending email...');
@@ -616,14 +631,20 @@ const HomeScreen = () => {
       // Find the thread from this sender
       const thread = await emailService.findThreadBySender(senderName, token);
       
-      // Store the current thread for potential reply
+      // Store the current thread for potential reply (both state and ref)
       setCurrentThread(thread);
       setCurrentSender(senderName);
+      currentThreadRef.current = thread;
+      currentSenderRef.current = senderName;
       console.log('✅ Stored thread context for replies:', {
         threadId: thread.id,
         senderName: senderName,
         subject: thread.latestMessage.subject
       });
+      console.log('✅ Set currentThread state to:', thread);
+      console.log('✅ Set currentSender state to:', senderName);
+      console.log('✅ Set currentThreadRef to:', thread);
+      console.log('✅ Set currentSenderRef to:', senderName);
       
       // Convert HTML email content to clean text using AI
       const cleanBody = await emailService.convertHtmlToText(thread.latestMessage.body, token, thread.latestMessage.subject);
@@ -685,7 +706,6 @@ const HomeScreen = () => {
       const replyData = await emailService.generateReply({
         threadId: currentThread.id,
         instruction: instruction,
-        senderName: currentSender,
         token: token,
       });
       
@@ -708,21 +728,27 @@ const HomeScreen = () => {
     console.log('🔍 Auto-reply command triggered');
     console.log('🔍 Current thread state:', currentThread);
     console.log('🔍 Current sender state:', currentSender);
+    console.log('🔍 Current thread ref:', currentThreadRef.current);
+    console.log('🔍 Current sender ref:', currentSenderRef.current);
+    console.log('🔍 Current thread ID:', currentThread?.id || currentThreadRef.current?.id);
+    console.log('🔍 Current thread subject:', currentThread?.latestMessage?.subject || currentThreadRef.current?.latestMessage?.subject);
+    console.log('🔍 Current thread from:', currentThread?.latestMessage?.from || currentThreadRef.current?.latestMessage?.from);
     
     try {
-      // Check if we have a current thread to reply to
-      if (!currentThread) {
-        console.log('❌ No current thread found');
+      // Check if we have a current thread to reply to (try state first, then ref)
+      const threadToUse = currentThread || currentThreadRef.current;
+      if (!threadToUse) {
+        console.log('❌ No current thread found in state or ref');
         const errorMsg = "I don't have an email to reply to. Try reading an email first, then ask me to write a reply.";
         setAgentResponse(errorMsg);
         await speakResponse(errorMsg);
         return;
       }
       
-      console.log(`🔍 Auto-generating reply for thread: ${currentThread.id}`);
+      console.log(`🔍 Auto-generating reply for thread: ${threadToUse.id}`);
       
       // Generate a contextual reply using AI
-      const replyDraft = await emailService.generateContextualReply(currentThread.id, token);
+      const replyDraft = await emailService.generateContextualReply(threadToUse.id, token);
       
       // Store the pending reply
       setPendingReply(replyDraft);
@@ -747,8 +773,9 @@ const HomeScreen = () => {
     setAgentResponse('Sending your reply...');
     
     try {
-      // Send the email using the pending reply
-      await emailService.sendReply(currentThread.id, pendingReply, token);
+      // Send the email using the pending reply (use ref as fallback)
+      const threadToUse = currentThread || currentThreadRef.current;
+      await emailService.sendReply(threadToUse.id, pendingReply, token);
       
       // Reset states
       setPendingReply('');
