@@ -1025,4 +1025,159 @@ router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => 
   }
 });
 
+// Generate contextual reply automatically
+router.post('/generate-contextual-reply', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+  try {
+    const { threadId } = req.body;
+
+    if (!threadId) {
+      return res.status(400).json({ error: 'Thread ID is required' });
+    }
+
+    const tryWithRefresh = async () => {
+      const { gmail } = createGmailClient(req.user.accessToken, req.user.refreshToken);
+      
+      // Get the thread to understand context
+      const threadResponse = await gmail.users.threads.get({
+        userId: 'me',
+        id: threadId,
+      });
+
+      const thread = threadResponse.data;
+      if (!thread.messages || thread.messages.length === 0) {
+        throw new Error('Thread has no messages');
+      }
+
+      // Get the latest message (the one to reply to)
+      const latestMessage = thread.messages[thread.messages.length - 1];
+      const payload = latestMessage.payload;
+      
+      // Extract email content
+      const fromHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'from');
+      const subjectHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'subject');
+      const senderName = fromHeader?.value?.replace(/<.*>/g, '').trim() || 'Unknown';
+      const originalSubject = subjectHeader?.value || 'No Subject';
+
+      // Extract email body
+      const emailBody = extractEmailBody(payload!);
+
+      // Generate contextual reply using AI
+      const replyContent = await AIService.generateContextualReply({
+        originalEmail: {
+          from: senderName,
+          subject: originalSubject,
+          body: emailBody,
+        },
+        instruction: "Generate a helpful and professional reply",
+        userName: req.user.name || 'User',
+      });
+
+      logger.info(`Generated contextual reply for thread ${threadId}`);
+      return res.json({ 
+        reply: replyContent,
+        threadId: threadId,
+        originalSubject: originalSubject,
+        replyTo: senderName,
+      });
+    };
+
+    try {
+      return await tryWithRefresh();
+    } catch (error: any) {
+      if (error.code === 401) {
+        logger.info('Access token expired, attempting refresh...');
+        return await tryWithRefresh();
+      }
+      throw error;
+    }
+
+  } catch (error) {
+    logger.error('Error generating contextual reply:', error);
+    return res.status(500).json({ error: 'Failed to generate contextual reply' });
+  }
+});
+
+// Send reply email
+router.post('/send-reply', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+  try {
+    const { threadId, replyContent } = req.body;
+
+    if (!threadId || !replyContent) {
+      return res.status(400).json({ error: 'Thread ID and reply content are required' });
+    }
+
+    const tryWithRefresh = async () => {
+      const { gmail } = createGmailClient(req.user.accessToken, req.user.refreshToken);
+      
+      // Get the thread to get reply information
+      const threadResponse = await gmail.users.threads.get({
+        userId: 'me',
+        id: threadId,
+      });
+
+      const thread = threadResponse.data;
+      if (!thread.messages || thread.messages.length === 0) {
+        throw new Error('Thread has no messages');
+      }
+
+      // Get the latest message to reply to
+      const latestMessage = thread.messages[thread.messages.length - 1];
+      const payload = latestMessage.payload;
+      
+      // Extract headers for reply
+      const fromHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'from');
+      const subjectHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'subject');
+      const messageIdHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'message-id');
+      
+      const toEmail = fromHeader?.value?.match(/<(.+)>/)?.[1] || fromHeader?.value || '';
+      const originalSubject = subjectHeader?.value || '';
+      const replySubject = originalSubject.startsWith('Re: ') ? originalSubject : `Re: ${originalSubject}`;
+
+      // Create reply email
+      const emailContent = [
+        `To: ${toEmail}`,
+        `Subject: ${replySubject}`,
+        messageIdHeader ? `In-Reply-To: ${messageIdHeader.value}` : '',
+        messageIdHeader ? `References: ${messageIdHeader.value}` : '',
+        'Content-Type: text/plain; charset=utf-8',
+        '',
+        replyContent
+      ].filter(line => line !== '').join('\n');
+
+      // Encode the email
+      const encodedEmail = Buffer.from(emailContent).toString('base64url');
+
+      // Send the reply
+      const sendResponse = await gmail.users.messages.send({
+        userId: 'me',
+        requestBody: {
+          raw: encodedEmail,
+          threadId: threadId,
+        },
+      });
+
+      logger.info(`Reply sent successfully for thread ${threadId}, message ID: ${sendResponse.data.id}`);
+      return res.json({ 
+        success: true,
+        messageId: sendResponse.data.id,
+        threadId: threadId,
+      });
+    };
+
+    try {
+      return await tryWithRefresh();
+    } catch (error: any) {
+      if (error.code === 401) {
+        logger.info('Access token expired, attempting refresh...');
+        return await tryWithRefresh();
+      }
+      throw error;
+    }
+
+  } catch (error) {
+    logger.error('Error sending reply:', error);
+    return res.status(500).json({ error: 'Failed to send reply' });
+  }
+});
+
 export default router; 

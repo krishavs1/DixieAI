@@ -75,6 +75,9 @@ const HomeScreen = () => {
   // State for read & reply functionality
   const [currentThread, setCurrentThread] = useState<any>(null);
   const [currentSender, setCurrentSender] = useState<string>('');
+  // State for auto-reply confirmation flow
+  const [pendingReply, setPendingReply] = useState<string>('');
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   
 
 
@@ -451,6 +454,19 @@ const HomeScreen = () => {
     console.log('Lowercase text:', lowerText);
     
     try {
+      // 0. CONFIRMATION COMMAND - if we're awaiting confirmation
+      if (awaitingConfirmation && (lowerText.includes('yes') || lowerText.includes('send') || lowerText.includes('okay') || lowerText.includes('ok'))) {
+        console.log('✅ DETECTED YES CONFIRMATION - Sending email...');
+        await handleSendConfirmedReply();
+        return;
+      }
+      
+      if (awaitingConfirmation && (lowerText.includes('no') || lowerText.includes('cancel') || lowerText.includes('don\'t'))) {
+        console.log('✅ DETECTED NO CONFIRMATION - Cancelling email...');
+        await handleCancelReply();
+        return;
+      }
+      
       // 1. SUMMARIZE COMMAND
       if (lowerText.includes('summarize') || lowerText.includes('summary')) {
         console.log('✅ DETECTED SUMMARIZE COMMAND - Processing...');
@@ -463,7 +479,13 @@ const HomeScreen = () => {
         await handleReadEmailCommand(text);
       }
       
-      // 3. WRITE REPLY COMMAND - "write a reply" or "reply to [name]"
+      // 3. AUTO REPLY COMMAND - "write a reply to that email" (check this FIRST - more specific)
+      else if (lowerText.includes('write') && lowerText.includes('reply') && (lowerText.includes('that') || lowerText.includes('this'))) {
+        console.log('✅ DETECTED AUTO REPLY COMMAND - Processing...');
+        await handleWriteAutoReplyCommand();
+      }
+      
+      // 4. WRITE REPLY COMMAND - "write a reply" or "reply to [name]" (less specific, check after)
       else if (lowerText.includes('write') && (lowerText.includes('reply') || lowerText.includes('respond'))) {
         console.log('✅ DETECTED WRITE REPLY COMMAND - Processing...');
         await handleWriteReplyCommand(text);
@@ -597,6 +619,11 @@ const HomeScreen = () => {
       // Store the current thread for potential reply
       setCurrentThread(thread);
       setCurrentSender(senderName);
+      console.log('✅ Stored thread context for replies:', {
+        threadId: thread.id,
+        senderName: senderName,
+        subject: thread.latestMessage.subject
+      });
       
       // Convert HTML email content to clean text using AI
       const cleanBody = await emailService.convertHtmlToText(thread.latestMessage.body, token, thread.latestMessage.subject);
@@ -672,6 +699,88 @@ const HomeScreen = () => {
        setAgentResponse(errorMsg);
        await speakResponse(errorMsg);
      }
+  };
+
+  // Handle auto-reply command - generates and asks for confirmation
+  const handleWriteAutoReplyCommand = async () => {
+    setAgentResponse('Generating a reply...');
+    
+    console.log('🔍 Auto-reply command triggered');
+    console.log('🔍 Current thread state:', currentThread);
+    console.log('🔍 Current sender state:', currentSender);
+    
+    try {
+      // Check if we have a current thread to reply to
+      if (!currentThread) {
+        console.log('❌ No current thread found');
+        const errorMsg = "I don't have an email to reply to. Try reading an email first, then ask me to write a reply.";
+        setAgentResponse(errorMsg);
+        await speakResponse(errorMsg);
+        return;
+      }
+      
+      console.log(`🔍 Auto-generating reply for thread: ${currentThread.id}`);
+      
+      // Generate a contextual reply using AI
+      const replyDraft = await emailService.generateContextualReply(currentThread.id, token);
+      
+      // Store the pending reply
+      setPendingReply(replyDraft);
+      setAwaitingConfirmation(true);
+      
+      // Ask for confirmation
+      const confirmationMessage = `Your reply says: ${replyDraft}. Can I send it?`;
+      setAgentResponse(confirmationMessage);
+      await speakResponse(confirmationMessage);
+      
+      console.log('✅ Auto-reply draft generated, awaiting confirmation');
+    } catch (error) {
+      console.error('❌ Error generating auto-reply:', error);
+      const fallbackReply = "I'm having trouble generating a reply right now. Please try again in a moment.";
+      setAgentResponse(fallbackReply);
+      await speakResponse(fallbackReply);
+         }
+   };
+
+  // Handle confirmed send
+  const handleSendConfirmedReply = async () => {
+    setAgentResponse('Sending your reply...');
+    
+    try {
+      // Send the email using the pending reply
+      await emailService.sendReply(currentThread.id, pendingReply, token);
+      
+      // Reset states
+      setPendingReply('');
+      setAwaitingConfirmation(false);
+      
+      const successMsg = "Reply sent successfully!";
+      setAgentResponse(successMsg);
+      await speakResponse(successMsg);
+      
+      console.log('✅ Auto-reply sent successfully');
+    } catch (error) {
+      console.error('❌ Error sending reply:', error);
+      const errorMsg = "Sorry, I had trouble sending that reply. Please try again.";
+      setAgentResponse(errorMsg);
+      await speakResponse(errorMsg);
+      
+      // Reset states on error too
+      setPendingReply('');
+      setAwaitingConfirmation(false);
+    }
+  };
+
+  // Handle cancelled reply
+  const handleCancelReply = async () => {
+    setPendingReply('');
+    setAwaitingConfirmation(false);
+    
+    const cancelMsg = "Okay, I've cancelled the reply.";
+    setAgentResponse(cancelMsg);
+    await speakResponse(cancelMsg);
+    
+    console.log('✅ Auto-reply cancelled by user');
   };
 
   const handleVoiceInputSubmit = () => {

@@ -692,4 +692,65 @@ export const emailService = {
       throw error;
     }
   },
+
+  // Generate a contextual reply automatically
+  generateContextualReply: async (threadId: string, token: string) => {
+    try {
+      const baseURL = await API_CONFIG.BASE_URL;
+      const url = `${baseURL}/api/email/generate-contextual-reply`;
+      
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ threadId }),
+      }, API_CONFIG.TIMEOUT);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Generated contextual reply`);
+      return data.reply;
+    } catch (error) {
+      console.error('Error generating contextual reply:', error);
+      throw error;
+    }
+  },
+
+  // Send a reply email
+  sendReply: async (threadId: string, replyContent: string, token: string) => {
+    try {
+      const baseURL = await API_CONFIG.BASE_URL;
+      const url = `${baseURL}/api/email/send-reply`;
+      
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          threadId, 
+          replyContent 
+        }),
+      }, API_CONFIG.TIMEOUT);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Reply sent successfully`);
+      return data;
+    } catch (error) {
+      console.error('Error sending reply:', error);
+      throw error;
+    }
+  },
 }; 
