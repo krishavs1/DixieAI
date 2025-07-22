@@ -83,6 +83,10 @@ const HomeScreen = () => {
   const currentThreadRef = useRef<any>(null);
   const currentSenderRef = useRef<string>('');
   
+  // Wake word detection state
+  const [isWakeWordListening, setIsWakeWordListening] = useState(false);
+  const wakeWordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
 
 
   if (!authContext) {
@@ -433,6 +437,44 @@ const HomeScreen = () => {
         message: 'Error opening voice agent. Please try again.',
         type: 'warning',
       });
+    }
+  };
+
+  // Start wake word detection
+  const startWakeWordDetection = async () => {
+    console.log('🎧 startWakeWordDetection called');
+    console.log('🎧 isWakeWordListening:', isWakeWordListening);
+    console.log('🎧 Voice available:', !!Voice);
+    
+    if (isWakeWordListening || !Voice) {
+      console.log('🎧 Skipping wake word detection - already listening or Voice not available');
+      return;
+    }
+    
+    console.log('🎧 Starting wake word detection...');
+    setIsWakeWordListening(true);
+    
+    try {
+      await Voice.start('en-US');
+      console.log('✅ Wake word detection started');
+    } catch (error) {
+      console.error('❌ Error starting wake word detection:', error);
+      setIsWakeWordListening(false);
+    }
+  };
+
+  // Stop wake word detection
+  const stopWakeWordDetection = async () => {
+    if (!isWakeWordListening) return;
+    
+    console.log('🛑 Stopping wake word detection...');
+    setIsWakeWordListening(false);
+    
+    try {
+      await Voice.stop();
+      console.log('✅ Wake word detection stopped');
+    } catch (error) {
+      console.error('❌ Error stopping wake word detection:', error);
     }
   };
 
@@ -905,6 +947,11 @@ const HomeScreen = () => {
     // Finally close the modal
     setShowVoiceAgent(false);
     
+    // Restart background listening after closing voice agent
+    setTimeout(() => {
+      startBackgroundListening();
+    }, 1000);
+    
     console.log('🚨 EMERGENCY SHUTDOWN COMPLETE');
   };
 
@@ -913,6 +960,38 @@ const HomeScreen = () => {
     console.log('Speech recognition started:', event);
     setVoiceText('Listening...');
     finalRecognizedTextRef.current = ''; // Reset the final text
+  };
+
+  // Wake word detection handler
+  const onWakeWordResults = (event: any) => {
+    console.log('🎧 WAKE WORD RESULTS RECEIVED:', event);
+    const results = event.value || [];
+    const text = results[0]?.toLowerCase() || '';
+    
+    console.log('🔍 Wake word check - text:', text);
+    console.log('🔍 Wake word check - isWakeWordListening:', isWakeWordListening);
+    
+    // Check for "yo dixie" or "hey dixie"
+    if (text.includes('yo dixie') || text.includes('hey dixie') || text.includes('hello dixie')) {
+      console.log('🎯 WAKE WORD DETECTED! Opening voice agent...');
+      
+      // Stop wake word detection
+      stopWakeWordDetection();
+      
+      // Open voice agent
+      setShowVoiceAgent(true);
+      setAgentResponse('Voice agent ready! Tap the mic to start listening.');
+      setIsVoiceAgentClosed(false);
+      setSpeechKillSwitch(false);
+      speechKillSwitchRef.current = false;
+      
+      // Restart wake word detection after a delay
+      setTimeout(() => {
+        if (!showVoiceAgent) {
+          startWakeWordDetection();
+        }
+      }, 5000);
+    }
   };
 
   const onSpeechEnd = (event: any) => {
@@ -976,6 +1055,34 @@ const HomeScreen = () => {
 
   const onSpeechResults = (event: any) => {
     console.log('Speech results received:', event);
+    console.log('🔍 Speech results - isWakeWordListening:', isWakeWordListening);
+    console.log('🔍 Speech results - showVoiceAgent:', showVoiceAgent);
+    
+    // If we're in wake word detection mode, use wake word handler
+    if (isWakeWordListening) {
+      console.log('🎧 Routing to wake word handler...');
+      onWakeWordResults(event);
+      return;
+    }
+    
+    // Check for wake word when voice agent is not open
+    if (!showVoiceAgent) {
+      const results = event.value || [];
+      const text = results[0]?.toLowerCase() || '';
+      console.log('🔍 Checking for wake word in background:', text);
+      
+      if (text.includes('yo dixie') || text.includes('hey dixie') || text.includes('hello dixie')) {
+        console.log('🎯 WAKE WORD DETECTED IN BACKGROUND! Opening voice agent...');
+        
+        // Open voice agent
+        setShowVoiceAgent(true);
+        setAgentResponse('Voice agent ready! Tap the mic to start listening.');
+        setIsVoiceAgentClosed(false);
+        setSpeechKillSwitch(false);
+        speechKillSwitchRef.current = false;
+        return;
+      }
+    }
     
     // Don't process results if voice agent is closed
     if (isVoiceAgentClosed) {
@@ -1216,6 +1323,53 @@ const HomeScreen = () => {
       }
     };
   }, []);
+
+  // Start background listening for wake words when component mounts
+  useEffect(() => {
+    console.log('🎧 Component mounted, setting up background listening...');
+    // Start background listening after a short delay
+    const timer = setTimeout(() => {
+      console.log('🎧 Timer fired, starting background listening...');
+      startBackgroundListening();
+    }, 2000); // Increased delay to ensure Voice module is ready
+    
+    return () => {
+      console.log('🎧 Component unmounting, cleaning up background listening...');
+      clearTimeout(timer);
+      stopBackgroundListening();
+    };
+  }, []);
+
+  // Start background listening for wake words
+  const startBackgroundListening = async () => {
+    console.log('🎧 startBackgroundListening called');
+    console.log('🎧 Voice available:', !!Voice);
+    
+    if (!Voice) {
+      console.log('🎧 Voice module not available for background listening');
+      return;
+    }
+    
+    try {
+      console.log('🎧 Starting background listening...');
+      await Voice.start('en-US');
+      console.log('✅ Background listening started');
+    } catch (error) {
+      console.error('❌ Error starting background listening:', error);
+    }
+  };
+
+  // Stop background listening
+  const stopBackgroundListening = async () => {
+    console.log('🛑 Stopping background listening...');
+    
+    try {
+      await Voice.stop();
+      console.log('✅ Background listening stopped');
+    } catch (error) {
+      console.error('❌ Error stopping background listening:', error);
+    }
+  };
 
   // Test function to manually add badges for debugging
   const testBadges = () => {
@@ -1741,6 +1895,12 @@ const HomeScreen = () => {
           <TouchableOpacity onPress={handleVoiceCommand} style={styles.voiceButton}>
             <Ionicons name="mic" size={20} color="#4285F4" />
           </TouchableOpacity>
+          {isWakeWordListening && (
+            <View style={styles.wakeWordIndicator}>
+              <Ionicons name="ear" size={12} color="#34A853" />
+              <Text style={styles.wakeWordText}>Listening</Text>
+            </View>
+          )}
         </View>
 
         {/* Clear Filters Button */}
@@ -2729,6 +2889,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#e1e5e9',
+  },
+  wakeWordIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E8',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  wakeWordText: {
+    fontSize: 10,
+    color: '#34A853',
+    marginLeft: 4,
+    fontWeight: '500',
   },
   listeningButton: {
     backgroundColor: '#FFE6E6',
