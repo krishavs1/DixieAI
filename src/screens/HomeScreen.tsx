@@ -590,7 +590,8 @@ const HomeScreen = () => {
   // Helper function to speak responses
   const speakResponse = async (text: string) => {
     if (Speech && typeof Speech.speak === 'function') {
-      console.log('Speaking response via Speech');
+      console.log('🎤 SPEAK RESPONSE CALLED - Text:', text.substring(0, 50) + '...');
+      console.log('🎤 Current state - showVoiceAgent:', showVoiceAgent, 'isVoiceAgentClosed:', isVoiceAgentClosed);
       setIsTtsSpeaking(true);
       setSpeechKillSwitch(false); // Reset kill switch
       
@@ -616,15 +617,29 @@ const HomeScreen = () => {
             pitch: 1.0,
             rate: 1.0,
             onDone: () => {
-              console.log('Speech completed successfully');
+              console.log('🎤 SPEECH COMPLETED SUCCESSFULLY');
+              console.log('🎤 Current state - showVoiceAgent:', showVoiceAgent, 'isVoiceAgentClosed:', isVoiceAgentClosed);
               setIsTtsSpeaking(false);
+              
+              // Always start wake word detection after speech completes, regardless of voice agent state
+              console.log('🎧 Speech completed, starting wake word detection...');
+              setTimeout(() => {
+                startWakeWordDetection();
+              }, 500);
             },
             onError: (error: any) => {
               console.error('Speech error:', error);
               setIsTtsSpeaking(false);
+              
+              // Always start wake word detection after speech error
+              console.log('🎧 Speech error, starting wake word detection...');
+              setTimeout(() => {
+                startWakeWordDetection();
+              }, 500);
             },
             onStart: () => {
-              console.log('Speech started successfully');
+              console.log('🎤 SPEECH STARTED SUCCESSFULLY');
+              console.log('🎤 Kill switch check - REF:', speechKillSwitchRef.current, 'STATE:', speechKillSwitch, 'isVoiceAgentClosed:', isVoiceAgentClosed);
               // Check kill switch right after speech starts - CHECK REF FIRST
               if (speechKillSwitchRef.current || speechKillSwitch || isVoiceAgentClosed) {
                 console.log('🛑 Killing speech immediately after start - REF:', speechKillSwitchRef.current, 'STATE:', speechKillSwitch);
@@ -635,6 +650,12 @@ const HomeScreen = () => {
             onStopped: () => {
               console.log('Speech was stopped');
               setIsTtsSpeaking(false);
+              
+              // Always start wake word detection after speech is stopped
+              console.log('🎧 Speech stopped, starting wake word detection...');
+              setTimeout(() => {
+                startWakeWordDetection();
+              }, 500);
             },
           });
         } catch (error) {
@@ -1091,78 +1112,108 @@ const HomeScreen = () => {
       return;
     }
     
-    // Check for wake word when voice agent is not open
-    if (!showVoiceAgent && !wakeWordJustDetectedRef.current) {
+    // Check for wake word - ALWAYS check for wake word regardless of state
+    // But don't check if we're currently speaking (TTS) or actively listening
+    if (!wakeWordJustDetectedRef.current && !isProcessingCommand && !isTtsSpeaking && !isListening) {
       const results = event.value || [];
       const text = results[0]?.toLowerCase() || '';
-      console.log('🔍 Checking for wake word in background:', text);
+      console.log('🔍 Checking for wake word:', text);
       
       if (text.includes('yo dixie') || text.includes('hey dixie') || text.includes('hello dixie')) {
-        console.log('🎯 WAKE WORD DETECTED IN BACKGROUND! Opening voice agent...');
+        console.log('🎯 WAKE WORD DETECTED! Starting listening...');
         wakeWordJustDetectedRef.current = true;
         
-        // Stop background listening first
-        stopBackgroundListening();
+        // Set processing flag to prevent other speech results from interfering
+        setIsProcessingCommand(true);
         
-        // Set flag to ignore the next speech result (which will be the wake word)
-        setIgnoreNextSpeechResult(true);
-        console.log('🚫 Set ignoreNextSpeechResult to true');
-        
-        // Open voice agent immediately
-        setShowVoiceAgent(true);
-        voiceAgentOpenRef.current = true;
-        setAgentResponse('Voice agent ready! Starting listening...');
-        setIsVoiceAgentClosed(false);
-        setSpeechKillSwitch(false);
-        speechKillSwitchRef.current = false;
-        
-        // Automatically start listening after a short delay
-        setTimeout(() => {
-          console.log('🎤 Auto-starting listening after wake word...');
+        // Handle wake word detection - either open voice agent or restart listening
+        if (!showVoiceAgent) {
+          // Voice agent is closed - open it and start listening
+          console.log('🎯 Wake word detected - opening voice agent and starting listening...');
           
-          // Play a "Ready!" sound and start listening when it completes
-          if (Speech && typeof Speech.speak === 'function') {
-            console.log('🎤 Speaking "Ready!" before starting to listen...');
-            setIsTtsSpeaking(true);
+          // Stop background listening first
+          stopBackgroundListening();
+          
+          // Set flag to ignore the next speech result (which will be the wake word)
+          setIgnoreNextSpeechResult(true);
+          console.log('🚫 Set ignoreNextSpeechResult to true');
+          
+          // Open voice agent immediately and set all flags
+          console.log('🎯 Setting showVoiceAgent to true...');
+          setShowVoiceAgent(true);
+          voiceAgentOpenRef.current = true;
+          setAgentResponse('Voice agent ready! Starting listening...');
+          setIsVoiceAgentClosed(false);
+          setSpeechKillSwitch(false);
+          speechKillSwitchRef.current = false;
+          
+          // Debug: Log the state after setting
+          setTimeout(() => {
+            console.log('🎯 Debug - showVoiceAgent state after setting:', showVoiceAgent);
+            console.log('🎯 Debug - voiceAgentOpenRef.current:', voiceAgentOpenRef.current);
+          }, 100);
+        } else {
+          // Voice agent is already open - just restart listening
+          console.log('🎯 Wake word detected - voice agent already open, restarting listening...');
+          
+          // Stop any current listening
+          stopListening();
+          
+          // Set flag to ignore the next speech result (which will be the wake word)
+          setIgnoreNextSpeechResult(true);
+          console.log('🚫 Set ignoreNextSpeechResult to true');
+          
+          // Set agent response
+          setAgentResponse('Restarting listening...');
+        }
+          
+          // Automatically start listening after a short delay
+          setTimeout(() => {
+            console.log('🎤 Auto-starting listening after wake word...');
             
-            Speech.speak('Ready!', {
-              language: 'en-US',
-              pitch: 1.0,
-              rate: 1.0,
-              onDone: () => {
-                console.log('🎤 "Ready!" completed, starting to listen...');
-                setIsTtsSpeaking(false);
-                startListening();
-              },
-              onError: (error: any) => {
-                console.error('Speech error:', error);
-                setIsTtsSpeaking(false);
-                startListening(); // Start listening even if speech fails
-              },
-              onStart: () => {
-                console.log('🎤 "Ready!" started speaking...');
-              },
-              onStopped: () => {
-                console.log('🎤 "Ready!" was stopped');
-                setIsTtsSpeaking(false);
-                startListening();
-              },
-            });
-          } else {
-            // Fallback if speech is not available
-            console.log('🎤 Speech not available, starting to listen immediately...');
-            startListening();
-          }
-          
-        }, 1000); // Increased delay to ensure background listening is fully stopped
+            // Play a "Ready!" sound and start listening when it completes
+            if (Speech && typeof Speech.speak === 'function') {
+              console.log('🎤 Speaking "Ready!" before starting to listen...');
+              setIsTtsSpeaking(true);
+              
+              Speech.speak('Ready!', {
+                language: 'en-US',
+                pitch: 1.0,
+                rate: 1.0,
+                onDone: () => {
+                  console.log('🎤 "Ready!" completed, starting to listen...');
+                  setIsTtsSpeaking(false);
+                  startListening();
+                },
+                onError: (error: any) => {
+                  console.error('Speech error:', error);
+                  setIsTtsSpeaking(false);
+                  startListening(); // Start listening even if speech fails
+                },
+                onStart: () => {
+                  console.log('🎤 "Ready!" started speaking...');
+                },
+                onStopped: () => {
+                  console.log('🎤 "Ready!" was stopped');
+                  setIsTtsSpeaking(false);
+                  startListening();
+                },
+              });
+            } else {
+              // Fallback if speech is not available
+              console.log('🎤 Speech not available, starting to listen immediately...');
+              startListening();
+            }
+            
+          }, 1000); // Increased delay to ensure background listening is fully stopped
         
         return;
       }
     }
     
-    // Don't process results if voice agent is closed
-    if (isVoiceAgentClosed || !voiceAgentOpenRef.current) {
-      console.log('Voice agent is closed or not open, ignoring speech results');
+    // Don't process results if voice agent is closed AND we're not actively listening
+    if (isVoiceAgentClosed && !isListening) {
+      console.log('Voice agent is closed and not listening, ignoring speech results');
       return;
     }
     
@@ -1256,7 +1307,7 @@ const HomeScreen = () => {
 
   const startListening = async () => {
     try {
-      console.log('Starting voice recognition...');
+      console.log('🎤 MIC BUTTON CLICKED - Starting voice recognition...');
       console.log('Voice module available:', !!Voice);
       
       // Don't start listening if TTS is currently speaking
@@ -1270,6 +1321,13 @@ const HomeScreen = () => {
         console.log('Already listening, not starting again');
         return;
       }
+      
+      // Stop background listening first to avoid conflicts
+      console.log('🛑 Stopping background listening before starting active listening...');
+      await stopBackgroundListening();
+      
+      // Small delay to ensure background listening is fully stopped
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       setIsListening(true);
       setListeningAnimation(true);
@@ -1316,6 +1374,7 @@ const HomeScreen = () => {
       
       // Reset wake word flag now that we're actively listening
       wakeWordJustDetectedRef.current = false;
+      setIsProcessingCommand(false); // Reset processing flag
       console.log('🎤 Reset wakeWordJustDetectedRef to false - now actively listening');
     } else {
       console.log('Voice module not available - using fallback');
@@ -1355,10 +1414,18 @@ const HomeScreen = () => {
       if (Voice && typeof Voice.stop === 'function') {
         try {
           await Voice.stop();
-          console.log('Voice recognition stopped successfully');
+          console.log('Voice recognition stopped');
         } catch (error) {
           console.log('Error stopping voice recognition:', error);
         }
+      }
+      
+      // If voice agent is still open, start wake word detection
+      if (showVoiceAgent && !isVoiceAgentClosed) {
+        console.log('🎧 Voice agent still open, starting wake word detection...');
+        setTimeout(() => {
+          startWakeWordDetection();
+        }, 500);
       }
       
       // Also destroy to clean up completely

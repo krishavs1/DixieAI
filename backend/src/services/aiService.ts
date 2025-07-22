@@ -208,7 +208,7 @@ Does this email contain important updates? (yes/no):`;
       // Get important emails
       const importantEmails = threads.filter((thread, index) => 
         classifications[index]?.isImportant
-      ).slice(0, 3); // Top 3
+      ); // Get all important emails
       
       // Create summary data
       const summaryData = {
@@ -225,17 +225,19 @@ Does this email contain important updates? (yes/no):`;
 
 When generating an inbox summary, produce exactly one sentence in this format:
 
-"You have {needReplies} emails needing your reply and {importantUpdates} important updates. The emails needing your reply are from {sender1}, {sender2}, ..., {senderN}. As for the important updates, {sender1} {action1} and {sender2} {action2}."
+"You have {needReplies} emails needing your reply and {importantUpdates} important updates. The emails needing your reply are from {sender1}, {sender2}, ..., {senderN}. As for the important updates, {sender1} {action1}, {sender2} {action2}, and {sender3} {action3}."
 
 Rules:
 • No greetings or sign-offs
 • No emojis
 • No extra sentences
-• Use commas to separate names, and "and" before the last item
+• Use commas to separate items, and "and" before the last item
 • For important updates, use format: "{sender} {action}" (e.g., "Google sent a security alert", "Sallie Mae shared Student Loan Information")
 • Be precise and direct
 • Convert subject lines into natural actions
-• Use natural speech patterns that sound conversational when spoken aloud`;
+• Use natural speech patterns that sound conversational when spoken aloud
+• Include ALL important updates, not just the first few
+• If there are many items, use "and X more" format for readability`;
 
       const userPrompt = `Inbox Summary Data:
 - Total emails: ${summaryData.totalEmails}
