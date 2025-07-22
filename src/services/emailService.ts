@@ -618,6 +618,41 @@ export const emailService = {
     }
   },
 
+  // Convert HTML email content to clean text
+  convertHtmlToText: async (htmlContent: string, token: string, subject?: string) => {
+    try {
+      const baseURL = await API_CONFIG.BASE_URL;
+      const url = `${baseURL}/api/ai/html-to-text`;
+      
+      console.log(`🔄 Converting HTML to clean text`);
+      
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          htmlContent,
+          subject,
+        }),
+      }, API_CONFIG.TIMEOUT);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Converted HTML to clean text`);
+      return data.text;
+    } catch (error) {
+      console.error('Error converting HTML to text:', error);
+      // Fallback to basic HTML stripping if AI fails
+      return htmlContent.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    }
+  },
+
   // Generate a contextual reply
   generateReply: async (options: {
     threadId: string;

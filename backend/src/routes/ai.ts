@@ -21,6 +21,90 @@ const generateReplySchema = z.object({
   }),
 });
 
+// Schema for HTML to text conversion
+const htmlToTextSchema = z.object({
+  htmlContent: z.string(),
+  subject: z.string().optional(),
+});
+
+// Convert HTML email content to clean, readable text
+router.post('/html-to-text', authMiddleware, async (req: any, res: express.Response) => {
+  try {
+    const { htmlContent, subject } = htmlToTextSchema.parse(req.body);
+    
+    logger.info('Converting HTML email to clean text');
+    
+    // Check if OpenAI API key is configured
+    if (!process.env.OPENAI_API_KEY) {
+      logger.warn('OpenAI API key not configured, using fallback HTML stripping');
+      const fallbackText = htmlContent.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      return res.json({
+        text: fallbackText,
+        success: true,
+        source: 'fallback',
+      });
+    }
+    
+    const systemPrompt = `You are an email content processor that converts HTML email content into clean, readable text.
+
+Your task is to:
+1. Extract the actual email content from HTML markup
+2. Remove all HTML tags, CSS, and formatting
+3. Preserve the natural flow and meaning of the text
+4. Remove tracking pixels, hidden elements, and email client artifacts
+5. Return only the human-readable content that should be read aloud
+6. Maintain proper sentence structure and punctuation
+7. Remove any "View in browser" links or email client instructions
+
+Return ONLY the clean, readable text content. Do not include any HTML, formatting instructions, or metadata.`;
+
+    const userPrompt = `Please convert this HTML email content to clean, readable text:
+
+Subject: ${subject || 'No subject'}
+
+HTML Content:
+${htmlContent}
+
+Return only the clean, readable text that should be read aloud to a user.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt,
+        },
+        {
+          role: 'user',
+          content: userPrompt,
+        },
+      ],
+      max_tokens: 500,
+      temperature: 0.1,
+    });
+
+    const cleanText = response.choices[0]?.message?.content?.trim() || '';
+    
+    if (cleanText) {
+      logger.info('Successfully converted HTML to clean text');
+      return res.json({
+        text: cleanText,
+        success: true,
+        source: 'openai',
+      });
+    } else {
+      throw new Error('No text generated from OpenAI');
+    }
+    
+  } catch (error) {
+    logger.error('Error converting HTML to text:', error);
+    return res.status(500).json({ 
+      error: 'Failed to convert HTML to text',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Generate AI-powered reply
 router.post('/generate-reply', authMiddleware, async (req: any, res: express.Response) => {
   try {

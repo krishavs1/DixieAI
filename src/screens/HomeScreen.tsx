@@ -72,6 +72,8 @@ const HomeScreen = () => {
   // State for read & reply functionality
   const [currentThread, setCurrentThread] = useState<any>(null);
   const [currentSender, setCurrentSender] = useState<string>('');
+  
+
 
   if (!authContext) {
     throw new Error('HomeScreen must be used within AuthProvider');
@@ -98,8 +100,10 @@ const HomeScreen = () => {
   // Initialize voices
   useEffect(() => {
     getAvailableVoices();
-    
-    // Welcome message for British voice
+  }, []);
+
+  // Welcome message for British voice
+  useEffect(() => {
     setTimeout(() => {
       showMessage({
         message: '🇬🇧 British voice set as default - sophisticated and natural!',
@@ -498,9 +502,9 @@ const HomeScreen = () => {
       setTimeout(async () => {
         try {
           await Speech.speak(conversationalText, {
-            language: selectedVoice,
+            language: 'en-US',
             pitch: 1.0,
-            rate: 0.75,
+            rate: 1.2,
             onDone: () => {
               console.log('Speech completed successfully');
               setIsTtsSpeaking(false);
@@ -574,10 +578,11 @@ const HomeScreen = () => {
       setCurrentThread(thread);
       setCurrentSender(senderName);
       
-      // Format the email for reading
-      const emailContent = `From ${thread.latestMessage.from}. Subject: ${thread.latestMessage.subject}. ${thread.latestMessage.body}`;
+      // Convert HTML email content to clean text using AI
+      const cleanBody = await emailService.convertHtmlToText(thread.latestMessage.body, token, thread.latestMessage.subject);
+      const emailContent = cleanBody;
       
-      setAgentResponse(`Found email from ${senderName}: ${emailContent}`);
+      setAgentResponse(emailContent);
       await speakResponse(emailContent);
       
       console.log('✅ Read email command completed successfully');
@@ -672,6 +677,8 @@ const HomeScreen = () => {
     
     // Reset TTS speaking state
     setIsTtsSpeaking(false);
+    
+
   };
 
   // Voice recognition event handlers
@@ -1496,18 +1503,6 @@ const HomeScreen = () => {
           <TouchableOpacity onPress={handleVoiceCommand} style={styles.voiceButton}>
             <Ionicons name="mic" size={20} color="#4285F4" />
           </TouchableOpacity>
-
-
-          <TouchableOpacity onPress={generateInboxSummary} style={styles.summaryButton}>
-            <Ionicons name="analytics" size={20} color="#34A853" />
-        </TouchableOpacity>
-          <TouchableOpacity onPress={() => showMessage({
-            message: '🎤 Tap the mic button to open voice agent and say "Summarize my inbox" with your voice!',
-            type: 'info',
-            duration: 3000,
-          })} style={styles.helpButton}>
-            <Ionicons name="help-circle" size={20} color="#607D8B" />
-          </TouchableOpacity>
         </View>
 
         {/* Clear Filters Button */}
@@ -1605,56 +1600,63 @@ const HomeScreen = () => {
               </View>
             </View>
 
-            {/* Listening Status */}
-            {isListening && (
-              <View style={styles.listeningStatusContainer}>
-                <View style={styles.listeningIndicator}>
-                  {listeningAnimation && (
-                    <Animated.View 
-                      style={[
-                        styles.listeningWave,
-                        {
-                          transform: [{ scale: pulseAnim }]
-                        }
-                      ]}
+            {/* Scrollable Content Area */}
+            <ScrollView 
+              style={styles.voiceAgentContent}
+              showsVerticalScrollIndicator={true}
+              contentContainerStyle={styles.voiceAgentContentContainer}
+            >
+              {/* Listening Status */}
+              {isListening && (
+                <View style={styles.listeningStatusContainer}>
+                  <View style={styles.listeningIndicator}>
+                    {listeningAnimation && (
+                      <Animated.View 
+                        style={[
+                          styles.listeningWave,
+                          {
+                            transform: [{ scale: pulseAnim }]
+                          }
+                        ]}
+                      />
+                    )}
+                    <Ionicons 
+                      name="mic" 
+                      size={32} 
+                      color={listeningAnimation ? "#ff4444" : "#4285F4"} 
                     />
-                  )}
-                  <Ionicons 
-                    name="mic" 
-                    size={32} 
-                    color={listeningAnimation ? "#ff4444" : "#4285F4"} 
-                  />
+                  </View>
+                  <Text style={styles.listeningText}>
+                    {listeningAnimation ? "Listening..." : "Ready to listen"}
+                  </Text>
                 </View>
-                <Text style={styles.listeningText}>
-                  {listeningAnimation ? "Listening..." : "Ready to listen"}
-                </Text>
-              </View>
-            )}
+              )}
 
-            {/* Voice Transcript */}
-            {voiceText && (
-              <View style={styles.voiceTranscriptContainer}>
-                <Text style={styles.voiceTranscriptLabel}>Transcript:</Text>
-                <Text style={styles.voiceTranscriptText}>{voiceText}</Text>
-              </View>
-            )}
+              {/* Voice Transcript */}
+              {voiceText && (
+                <View style={styles.voiceTranscriptContainer}>
+                  <Text style={styles.voiceTranscriptLabel}>Transcript:</Text>
+                  <Text style={styles.voiceTranscriptText}>{voiceText}</Text>
+                </View>
+              )}
 
-            {/* Agent Response */}
-            {agentResponse && (
-              <View style={styles.agentResponseContainer}>
-                <Text style={styles.agentResponseLabel}>Dixie:</Text>
-                <Text style={styles.agentResponseText}>{agentResponse}</Text>
-              </View>
-            )}
+              {/* Agent Response */}
+              {agentResponse && (
+                <View style={styles.agentResponseContainer}>
+                  <Text style={styles.agentResponseLabel}>Dixie:</Text>
+                  <Text style={styles.agentResponseText}>{agentResponse}</Text>
+                </View>
+              )}
 
-            {/* Instructions */}
-            {!isListening && !voiceText && !agentResponse && (
-              <View style={styles.voiceAgentInstructions}>
-                <Text style={styles.voiceAgentInstructionsText}>
-                  Voice agent ready! Tap the mic to start listening.
-                </Text>
-              </View>
-            )}
+              {/* Instructions */}
+              {!isListening && !voiceText && !agentResponse && (
+                <View style={styles.voiceAgentInstructions}>
+                  <Text style={styles.voiceAgentInstructionsText}>
+                    Voice agent ready! Tap the mic to start listening.
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
 
             {/* Input Area */}
             <View style={styles.voiceAgentInputContainer}>
@@ -1975,9 +1977,7 @@ const styles = StyleSheet.create({
   testButton: {
     padding: 5,
   },
-  summaryButton: {
-    padding: 5,
-  },
+
   content: {
     flex: 1,
   },
@@ -2509,15 +2509,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
-  helpButton: {
-    backgroundColor: '#f8f9fa',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e1e5e9',
-    marginLeft: 8,
-  },
+
   debugButton: {
     padding: 4,
     marginLeft: 8,
@@ -2694,6 +2686,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  voiceAgentContent: {
+    maxHeight: 300,
+    marginBottom: 15,
+  },
+  voiceAgentContentContainer: {
+    paddingBottom: 10,
   },
 });
 
