@@ -51,7 +51,7 @@ const HomeScreen = () => {
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechRate, setSpeechRate] = useState(0.8);
-  const [selectedVoice, setSelectedVoice] = useState('en-GB');
+  const [selectedVoice, setSelectedVoice] = useState('en-GB'); // British English for more natural sound
   const [availableVoices, setAvailableVoices] = useState<string[]>([]);
   // Add state for visual feedback
   const [isListening, setIsListening] = useState(false);
@@ -69,6 +69,9 @@ const HomeScreen = () => {
   const slideAnim = useState(new Animated.Value(-300))[0];
   // Add a ref to store the final recognized text
   const finalRecognizedTextRef = useRef<string>('');
+  // State for read & reply functionality
+  const [currentThread, setCurrentThread] = useState<any>(null);
+  const [currentSender, setCurrentSender] = useState<string>('');
 
   if (!authContext) {
     throw new Error('HomeScreen must be used within AuthProvider');
@@ -409,7 +412,7 @@ const HomeScreen = () => {
       console.log('✅ Voice agent state set to true');
     } catch (error) {
       console.log('❌ Error showing voice agent:', error);
-      showMessage({
+    showMessage({
         message: 'Error opening voice agent. Please try again.',
         type: 'warning',
       });
@@ -436,101 +439,37 @@ const HomeScreen = () => {
     
     const lowerText = text.toLowerCase();
     console.log('Lowercase text:', lowerText);
-    console.log('Does it contain "summarize"?', lowerText.includes('summarize'));
-    console.log('Does it contain "summary"?', lowerText.includes('summary'));
     
-    if (lowerText.includes('summarize') || lowerText.includes('summary')) {
-      console.log('✅ DETECTED SUMMARIZE COMMAND - Processing...');
-      
-      // Set loading state
-      setAgentResponse('Generating inbox summary...');
-      
-      try {
-        console.log('Calling emailService.generateInboxSummary...');
-        // Call the email service directly to get the summary
-        const summary = await emailService.generateInboxSummary(token);
-        console.log('✅ Summary generated successfully:', summary);
-        
-        // Set the response first
-        setAgentResponse(summary);
-        
-        // Speak the summary
-        if (Speech && typeof Speech.speak === 'function') {
-          console.log('Speaking summary via Speech');
-          setIsTtsSpeaking(true);
-          
-          // Wait a moment before speaking
-          setTimeout(async () => {
-            try {
-              await Speech.speak(summary, {
-                language: 'en-US',
-                pitch: 1.1,
-                rate: 0.8,
-                onDone: () => {
-                  console.log('Speech completed successfully');
-                  setIsTtsSpeaking(false);
-                },
-                onError: (error: any) => {
-                  console.error('Speech error:', error);
-                  setIsTtsSpeaking(false);
-                },
-                onStart: () => {
-                  console.log('Speech started successfully');
-                },
-                onStopped: () => {
-                  console.log('Speech was stopped');
-                  setIsTtsSpeaking(false);
-                },
-              });
-            } catch (error) {
-              console.error('Error starting speech:', error);
-              setIsTtsSpeaking(false);
-            }
-          }, 500);
-        } else {
-          console.log('Speech module not available for TTS');
-          setIsTtsSpeaking(false);
-        }
-        
-        console.log('✅ Command processing completed successfully');
-      } catch (error) {
-        console.error('❌ Error generating summary:', error);
-        
-        // Fallback summary if backend fails
-        const fallbackSummary = "Hey! I'm having trouble connecting to your email right now, but I can see you want a summary. Try checking your connection and ask me again in a moment!";
-        setAgentResponse(fallbackSummary);
-        
-        // Speak the fallback message
-        if (Speech && typeof Speech.speak === 'function') {
-          setIsTtsSpeaking(true);
-          setTimeout(async () => {
-            try {
-              await Speech.speak(fallbackSummary, {
-                language: 'en-US',
-                pitch: 1.1,
-                rate: 0.8,
-                onDone: () => {
-                  console.log('Fallback speech completed');
-                  setIsTtsSpeaking(false);
-                },
-                onError: (error: any) => {
-                  console.error('Fallback speech error:', error);
-                  setIsTtsSpeaking(false);
-                },
-              });
-            } catch (error) {
-              console.error('Error starting fallback speech:', error);
-              setIsTtsSpeaking(false);
-            }
-          }, 500);
-        } else {
-          console.log('Speech module not available for fallback TTS');
-          setIsTtsSpeaking(false);
-        }
+    try {
+      // 1. SUMMARIZE COMMAND
+      if (lowerText.includes('summarize') || lowerText.includes('summary')) {
+        console.log('✅ DETECTED SUMMARIZE COMMAND - Processing...');
+        await handleSummarizeCommand();
       }
-    } else {
-      console.log('❌ No summarize command detected in:', text);
-      setAgentResponse('I heard: ' + text + '. Try saying "summarize my inbox"');
+      
+      // 2. READ EMAIL COMMAND - "read email from [name]" or "read the email from [name]"
+      else if (lowerText.includes('read') && (lowerText.includes('email from') || lowerText.includes('message from'))) {
+        console.log('✅ DETECTED READ EMAIL COMMAND - Processing...');
+        await handleReadEmailCommand(text);
+      }
+      
+      // 3. WRITE REPLY COMMAND - "write a reply" or "reply to [name]"
+      else if (lowerText.includes('write') && (lowerText.includes('reply') || lowerText.includes('respond'))) {
+        console.log('✅ DETECTED WRITE REPLY COMMAND - Processing...');
+        await handleWriteReplyCommand(text);
+      }
+      
+      // 4. UNKNOWN COMMAND
+      else {
+        console.log('❌ No recognized command detected in:', text);
+        setAgentResponse(`I heard: "${text}". Try saying "summarize my inbox", "read email from [name]", or "write a reply".`);
+        speakResponse(`I heard "${text}". Try saying "summarize my inbox", "read email from [name]", or "write a reply".`);
+      }
+    } catch (error) {
+      console.error('❌ Error processing voice command:', error);
+      const errorMessage = "Sorry, I had trouble processing that command. Please try again.";
+      setAgentResponse(errorMessage);
+      speakResponse(errorMessage);
     }
     
     // Reset processing flag after a delay
@@ -540,6 +479,174 @@ const HomeScreen = () => {
     }, 1000);
     
     console.log('=== END PROCESSING VOICE COMMAND ===');
+  };
+
+  // Helper function to speak responses
+  const speakResponse = async (text: string) => {
+    if (Speech && typeof Speech.speak === 'function') {
+      console.log('Speaking response via Speech');
+      setIsTtsSpeaking(true);
+      
+      // Add natural speech patterns and pauses
+      const conversationalText = text
+        .replace(/\. /g, '... ') // Add pauses after periods
+        .replace(/, /g, ', ... ') // Add pauses after commas
+        .replace(/ and /g, ' ... and ') // Add pause before "and"
+        .replace(/\.$/, '...'); // Add pause at the end
+      
+      // Wait a moment before speaking
+      setTimeout(async () => {
+        try {
+          await Speech.speak(conversationalText, {
+            language: selectedVoice,
+            pitch: 1.0,
+            rate: 0.75,
+            onDone: () => {
+              console.log('Speech completed successfully');
+              setIsTtsSpeaking(false);
+            },
+            onError: (error: any) => {
+              console.error('Speech error:', error);
+              setIsTtsSpeaking(false);
+            },
+            onStart: () => {
+              console.log('Speech started successfully');
+            },
+            onStopped: () => {
+              console.log('Speech was stopped');
+              setIsTtsSpeaking(false);
+            },
+          });
+        } catch (error) {
+          console.error('Error starting speech:', error);
+          setIsTtsSpeaking(false);
+        }
+      }, 500);
+    } else {
+      console.log('Speech module not available for TTS');
+      setIsTtsSpeaking(false);
+    }
+  };
+
+  // Handle summarize command
+  const handleSummarizeCommand = async () => {
+    setAgentResponse('Generating inbox summary...');
+    
+    try {
+      console.log('Calling emailService.generateInboxSummary...');
+      const summary = await emailService.generateInboxSummary(token);
+      console.log('✅ Summary generated successfully:', summary);
+      
+      setAgentResponse(summary);
+      await speakResponse(summary);
+      console.log('✅ Summarize command completed successfully');
+    } catch (error) {
+      console.error('❌ Error generating summary:', error);
+      const fallbackSummary = "Hey! I'm having trouble connecting to your email right now, but I can see you want a summary. Try checking your connection and ask me again in a moment!";
+      setAgentResponse(fallbackSummary);
+      await speakResponse(fallbackSummary);
+    }
+  };
+
+  // Handle read email command
+  const handleReadEmailCommand = async (text: string) => {
+    setAgentResponse('Looking for that email...');
+    
+    try {
+      // Extract sender name from the command
+      // Patterns: "read email from Bob", "read the email from Bob", "read message from Bob"
+      const senderMatch = text.match(/(?:read.*?(?:email|message)\s+from\s+)([a-zA-Z\s]+)/i);
+      const senderName = senderMatch ? senderMatch[1].trim() : '';
+      
+      if (!senderName) {
+        const errorMsg = "I didn't catch who you want to read the email from. Try saying 'read email from [name]'.";
+        setAgentResponse(errorMsg);
+        await speakResponse(errorMsg);
+        return;
+      }
+      
+      console.log(`🔍 Looking for email from: ${senderName}`);
+      
+      // Find the thread from this sender
+      const thread = await emailService.findThreadBySender(senderName, token);
+      
+      // Store the current thread for potential reply
+      setCurrentThread(thread);
+      setCurrentSender(senderName);
+      
+      // Format the email for reading
+      const emailContent = `From ${thread.latestMessage.from}. Subject: ${thread.latestMessage.subject}. ${thread.latestMessage.body}`;
+      
+      setAgentResponse(`Found email from ${senderName}: ${emailContent}`);
+      await speakResponse(emailContent);
+      
+      console.log('✅ Read email command completed successfully');
+         } catch (error) {
+       console.error('❌ Error reading email:', error);
+       const errorMsg = (error as Error).message || "Sorry, I couldn't find an email from that person. Try being more specific.";
+       setAgentResponse(errorMsg);
+       await speakResponse(errorMsg);
+     }
+  };
+
+  // Handle write reply command
+  const handleWriteReplyCommand = async (text: string) => {
+    if (!currentThread) {
+      const errorMsg = "I need to read an email first before I can write a reply. Try saying 'read email from [name]' first.";
+      setAgentResponse(errorMsg);
+      await speakResponse(errorMsg);
+      return;
+    }
+    
+    setAgentResponse('Generating your reply...');
+    
+    try {
+      // Extract the instruction from the command
+      // Patterns: "write a reply telling them...", "write a reply saying...", "reply that..."
+      let instruction = '';
+      
+      if (text.includes('telling')) {
+        const match = text.match(/telling.*?(.*)/i);
+        instruction = match ? match[1].trim() : '';
+      } else if (text.includes('saying')) {
+        const match = text.match(/saying.*?(.*)/i);
+        instruction = match ? match[1].trim() : '';
+      } else if (text.includes('that')) {
+        const match = text.match(/reply\s+that\s+(.*)/i);
+        instruction = match ? match[1].trim() : '';
+      } else {
+        // Extract everything after "write a reply"
+        const match = text.match(/write.*?reply\s+(.*)/i);
+        instruction = match ? match[1].trim() : '';
+      }
+      
+      if (!instruction) {
+        const errorMsg = "What would you like the reply to say? Try 'write a reply telling them [your message]'.";
+        setAgentResponse(errorMsg);
+        await speakResponse(errorMsg);
+        return;
+      }
+      
+      console.log(`✍️ Generating reply with instruction: ${instruction}`);
+      
+      // Generate the reply
+      const replyData = await emailService.generateReply({
+        threadId: currentThread.id,
+        instruction: instruction,
+        senderName: currentSender,
+        token: token,
+      });
+      
+      setAgentResponse(`Here's your reply: ${replyData.reply}`);
+      await speakResponse(replyData.reply);
+      
+      console.log('✅ Write reply command completed successfully');
+         } catch (error) {
+       console.error('❌ Error generating reply:', error);
+       const errorMsg = (error as Error).message || "Sorry, I had trouble generating that reply. Please try again.";
+       setAgentResponse(errorMsg);
+       await speakResponse(errorMsg);
+     }
   };
 
   const handleVoiceInputSubmit = () => {
@@ -811,59 +918,7 @@ const HomeScreen = () => {
     }
   };
 
-  const handleSummarizeCommand = async () => {
-    setIsAgentProcessing(true);
-    setAgentResponse('Generating inbox summary...');
-    
-    try {
-      // Call the existing generateInboxSummary function
-      await generateInboxSummary();
-      
-      // Get the summary text and speak it
-      const summaryText = 'Inbox summary generated! Check the notification above for details.';
-      setAgentResponse(summaryText);
-      
-      // Speak the summary out loud
-      try {
-        if (Tts && typeof Tts.speak === 'function') {
-          Tts.speak(summaryText);
-        } else {
-          // Fallback to Expo Speech
-          Speech.speak(summaryText, {
-            rate: 0.5,
-            pitch: 1.0,
-            language: 'en-US'
-          });
-        }
-      } catch (ttsError) {
-        console.log('TTS error, using Expo Speech fallback:', ttsError);
-        Speech.speak(summaryText, {
-          rate: 0.5,
-          pitch: 1.0,
-          language: 'en-US'
-        });
-      }
-      
-    } catch (error) {
-      const errorMessage = 'Sorry, I encountered an error while summarizing your inbox.';
-      setAgentResponse(errorMessage);
-      try {
-        if (Tts && typeof Tts.speak === 'function') {
-          Tts.speak(errorMessage);
-        } else {
-          Speech.speak(errorMessage, {
-            rate: 0.5,
-            pitch: 1.0,
-            language: 'en-US'
-          });
-        }
-      } catch (ttsError) {
-        console.log('TTS error in error handling:', ttsError);
-      }
-    } finally {
-      setIsAgentProcessing(false);
-    }
-  };
+
 
   // Set up voice recognition event listeners
   useEffect(() => {
@@ -976,10 +1031,17 @@ const HomeScreen = () => {
     setIsSpeaking(true);
     console.log('Starting speech with rate:', speechRate, 'voice:', selectedVoice);
     
-    Speech.speak(text, {
+    // Add natural speech patterns
+    const conversationalText = text
+      .replace(/\. /g, '... ')
+      .replace(/, /g, ', ... ')
+      .replace(/ and /g, ' ... and ')
+      .replace(/\.$/, '...');
+    
+    Speech.speak(conversationalText, {
       language: selectedVoice,
-      pitch: 1.1, // Slightly higher pitch for more natural sound
-      rate: speechRate,
+      pitch: 1.0, // Natural pitch for conversational sound
+      rate: 0.75, // Slightly slower for more natural pace
       onDone: () => {
         console.log('Speech completed successfully');
         setIsSpeaking(false);
@@ -1051,9 +1113,9 @@ const HomeScreen = () => {
     
     // Try different speech configurations
     const testConfigs = [
-      { language: selectedVoice, pitch: 1.1, rate: 0.8 },
-      { language: selectedVoice, pitch: 1.0, rate: 1.0 },
-      { language: selectedVoice, pitch: 1.2, rate: 0.6 },
+      { language: selectedVoice, pitch: 1.0, rate: 0.75 },
+      { language: selectedVoice, pitch: 0.95, rate: 0.8 },
+      { language: selectedVoice, pitch: 1.05, rate: 0.7 },
     ];
     
     let configIndex = 0;
@@ -1285,8 +1347,8 @@ const HomeScreen = () => {
     try {
       // Expanded voice options with more variety
       const voices = [
-        'en-US', // Default US English
         'en-GB', // British English (often sounds more natural)
+        'en-US', // Default US English
         'en-AU', // Australian English
         'en-CA', // Canadian English
         'en-IN', // Indian English (clear pronunciation)
@@ -1516,12 +1578,31 @@ const HomeScreen = () => {
                 <Ionicons name="mic" size={20} color="#333" />
                 <Text style={styles.voiceAgentTitle}>Dixie Voice Agent</Text>
               </View>
-              <TouchableOpacity 
-                onPress={() => setShowVoiceAgent(false)}
-                style={styles.voiceAgentCloseButton}
-              >
-                <Ionicons name="close" size={20} color="#666" />
-              </TouchableOpacity>
+              <View style={styles.voiceAgentHeaderRight}>
+                <TouchableOpacity 
+                  onPress={changeVoice}
+                  style={styles.voiceButton}
+                >
+                  <Text style={styles.voiceText}>
+                    {selectedVoice === 'en-GB' ? '🇬🇧 British' : 
+                     selectedVoice === 'en-US' ? '🇺🇸 American' :
+                     selectedVoice === 'en-AU' ? '🇦🇺 Australian' :
+                     selectedVoice === 'en-CA' ? '🇨🇦 Canadian' :
+                     selectedVoice === 'en-IN' ? '🇮🇳 Indian' :
+                     selectedVoice === 'en-IE' ? '🇮🇪 Irish' :
+                     selectedVoice === 'en-ZA' ? '🇿🇦 South African' :
+                     selectedVoice === 'en-NZ' ? '🇳🇿 New Zealand' :
+                     selectedVoice === 'en-PH' ? '🇵🇭 Philippine' :
+                     selectedVoice === 'en-SG' ? '🇸🇬 Singapore' : selectedVoice}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={() => setShowVoiceAgent(false)}
+                  style={styles.voiceAgentCloseButton}
+                >
+                  <Ionicons name="close" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Listening Status */}
@@ -2469,6 +2550,11 @@ const styles = StyleSheet.create({
   voiceAgentHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  voiceAgentHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   voiceAgentTitle: {
     fontSize: 20,

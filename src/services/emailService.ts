@@ -584,4 +584,77 @@ export const emailService = {
       throw error;
     }
   },
+
+  // Find emails by sender name
+  findThreadBySender: async (senderName: string, token: string) => {
+    try {
+      const baseURL = await API_CONFIG.BASE_URL;
+      const url = `${baseURL}/api/email/threads/by-sender?sender=${encodeURIComponent(senderName)}`;
+      
+      console.log(`🔍 Finding emails from: ${senderName}`);
+      
+      const response = await fetchWithTimeout(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }, API_CONFIG.TIMEOUT);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 404) {
+          throw new Error(`No emails found from "${senderName}"`);
+        }
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Found email from ${senderName}: ${data.thread.subject}`);
+      return data.thread;
+    } catch (error) {
+      console.error('Error finding thread by sender:', error);
+      throw error;
+    }
+  },
+
+  // Generate a contextual reply
+  generateReply: async (options: {
+    threadId: string;
+    instruction: string;
+    senderName?: string;
+    token: string;
+  }) => {
+    try {
+      const baseURL = await API_CONFIG.BASE_URL;
+      const url = `${baseURL}/api/email/generate-reply`;
+      
+      console.log(`✍️ Generating reply for thread: ${options.threadId}`);
+      
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${options.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          threadId: options.threadId,
+          instruction: options.instruction,
+          senderName: options.senderName,
+        }),
+      }, API_CONFIG.TIMEOUT);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Generated reply for ${data.replyTo}`);
+      return data;
+    } catch (error) {
+      console.error('Error generating reply:', error);
+      throw error;
+    }
+  },
 }; 

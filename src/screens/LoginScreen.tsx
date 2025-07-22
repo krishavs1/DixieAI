@@ -251,71 +251,71 @@ const LoginScreen = () => {
       
       {/* Main Content */}
       <View style={styles.content}>
-        {/* Logo Section */}
+      {/* Logo Section */}
         <View style={styles.logoContainer}>
           <View style={styles.logoWrapper}>
-            <Image
+        <Image
               source={require('../../assets/images/DixieLogo.png')}
-              style={styles.logo}
-              resizeMode="contain"
+          style={styles.logo}
+          resizeMode="contain"
               onError={(error) => console.log('Logo loading error:', error)}
-            />
+        />
           </View>
-          <Text style={styles.title}>DixieAI</Text>
-          <Text style={styles.subtitle}>Your AI Email Assistant</Text>
+        <Text style={styles.title}>DixieAI</Text>
+        <Text style={styles.subtitle}>Your AI Email Assistant</Text>
           <Text style={styles.description}>
             Transform your email experience with intelligent organization and insights
           </Text>
-        </View>
+      </View>
 
         {/* Login Section */}
-        <View style={styles.loginContainer}>
-          <TouchableOpacity
-            style={[
-              styles.googleButton,
-              (loading || backendStatus === 'disconnected') && styles.disabledButton
-            ]}
-            onPress={handleGoogleLogin}
-            disabled={loading || backendStatus === 'disconnected'}
-          >
+      <View style={styles.loginContainer}>
+        <TouchableOpacity
+          style={[
+            styles.googleButton,
+            (loading || backendStatus === 'disconnected') && styles.disabledButton
+          ]}
+          onPress={handleGoogleLogin}
+          disabled={loading || backendStatus === 'disconnected'}
+        >
             <View style={styles.googleIconContainer}>
               <Ionicons name="logo-google" size={20} color="#4285F4" />
             </View>
-            <Text style={styles.googleButtonText}>
+          <Text style={styles.googleButtonText}>
               {loading ? 'Signing in...' : 'Continue with Google'}
-            </Text>
+          </Text>
             {loading && <View style={styles.loadingSpinner} />}
-          </TouchableOpacity>
-          
-          {/* Backend Status Indicator */}
-          <View style={styles.statusContainer}>
-            <View style={[
-              styles.statusIndicator,
-              backendStatus === 'connected' && styles.statusConnected,
-              backendStatus === 'disconnected' && styles.statusDisconnected,
-              backendStatus === 'checking' && styles.statusChecking,
-            ]} />
-            <Text style={styles.statusText}>
-              {backendStatus === 'checking' && 'Checking server...'}
-              {backendStatus === 'connected' && 'Server connected'}
-              {backendStatus === 'disconnected' && 'Server disconnected'}
-            </Text>
-            <TouchableOpacity 
-              style={styles.refreshStatusButton} 
-              onPress={() => {
-                clearBackendURLCache();
-                checkBackendConnectivity();
-              }}
-            >
+        </TouchableOpacity>
+        
+        {/* Backend Status Indicator */}
+        <View style={styles.statusContainer}>
+          <View style={[
+            styles.statusIndicator,
+            backendStatus === 'connected' && styles.statusConnected,
+            backendStatus === 'disconnected' && styles.statusDisconnected,
+            backendStatus === 'checking' && styles.statusChecking,
+          ]} />
+          <Text style={styles.statusText}>
+            {backendStatus === 'checking' && 'Checking server...'}
+            {backendStatus === 'connected' && 'Server connected'}
+            {backendStatus === 'disconnected' && 'Server disconnected'}
+          </Text>
+          <TouchableOpacity 
+            style={styles.refreshStatusButton} 
+            onPress={() => {
+              clearBackendURLCache();
+              checkBackendConnectivity();
+            }}
+          >
               <Ionicons name="refresh" size={16} color="rgba(255,255,255,0.7)" />
-            </TouchableOpacity>
-          </View>
-          
-          {backendStatus === 'disconnected' && (
-            <TouchableOpacity style={styles.retryButton} onPress={checkBackendConnectivity}>
-              <Text style={styles.retryButtonText}>Retry Connection</Text>
-            </TouchableOpacity>
-          )}
+          </TouchableOpacity>
+        </View>
+        
+        {backendStatus === 'disconnected' && (
+          <TouchableOpacity style={styles.retryButton} onPress={checkBackendConnectivity}>
+            <Text style={styles.retryButtonText}>Retry Connection</Text>
+          </TouchableOpacity>
+        )}
         </View>
       </View>
 

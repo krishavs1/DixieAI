@@ -151,6 +151,6 @@ function generateContextualReply(context: any): string {
   
   // Default professional reply
   return "Thank you for your email. I've received your message and will review it carefully. I'll respond with a detailed reply shortly. I appreciate you reaching out.";
-}
+  }
 
 export default router; 

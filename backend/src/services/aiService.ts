@@ -218,17 +218,21 @@ Does this email contain important updates? (yes/no):`;
         promotionalCount: totalEmails - needsReplyCount - importantCount
       };
 
-      const systemPrompt = `You are Dixie, a friendly email assistant. Generate a conversational, helpful summary of the user's inbox.
+      const systemPrompt = `You are Dixie, an inbox-summarization assistant.
 
-Be conversational and encouraging. Use emojis sparingly but effectively. Focus on actionable insights.
+When generating an inbox summary, produce exactly one sentence in this format:
 
-Structure your response like this:
-1. Brief overview with key numbers
-2. Priority actions (emails needing replies)
-3. Important updates to review
-4. Encouraging conclusion
+"You have {needReplies} emails needing your reply and {importantUpdates} important updates. The emails needing your reply are from {sender1}, {sender2}, ..., {senderN}. As for the important updates, {sender1} {action1} and {sender2} {action2}."
 
-Keep it concise but friendly.`;
+Rules:
+• No greetings or sign-offs
+• No emojis
+• No extra sentences
+• Use commas to separate names, and "and" before the last item
+• For important updates, use format: "{sender} {action}" (e.g., "Google sent a security alert", "Sallie Mae shared Student Loan Information")
+• Be precise and direct
+• Convert subject lines into natural actions
+• Use natural speech patterns that sound conversational when spoken aloud`;
 
       const userPrompt = `Inbox Summary Data:
 - Total emails: ${summaryData.totalEmails}
@@ -243,7 +247,7 @@ ${summaryData.emailsNeedingReply.map(e => `• "${e.subject}" from ${e.from}`).j
 Important emails:
 ${summaryData.importantEmails.map(e => `• "${e.subject}" from ${e.from}`).join('\n')}
 
-Generate a friendly, conversational summary:`;
+Generate the inbox summary in exactly one sentence. For important updates, convert the subject into a natural action (e.g., "PLEASE READ: Important 2025 Student Loan Option Information" becomes "Sallie Mae shared Student Loan Information").`;
 
       const response = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
@@ -262,6 +266,75 @@ Generate a friendly, conversational summary:`;
     } catch (error) {
       logger.error('Error generating inbox summary:', error);
       return 'Sorry, I had trouble analyzing your inbox. Please try again.';
+    }
+  }
+
+  /**
+   * Generate a contextual reply based on the original email and user instruction
+   */
+  static async generateContextualReply(options: {
+    originalEmail: {
+      from: string;
+      subject: string;
+      body: string;
+    };
+    instruction: string;
+    userName: string;
+  }): Promise<string> {
+    try {
+      const { originalEmail, instruction, userName } = options;
+      
+      // Clean the original email body
+      const cleanBody = this.cleanEmailContent(originalEmail.body);
+      
+      // Extract sender name from email address/format
+      const senderName = originalEmail.from.includes('<') 
+        ? originalEmail.from.split('<')[0].trim() 
+        : originalEmail.from.split('@')[0];
+      
+      const systemPrompt = `You are Dixie, an AI email assistant helping ${userName} write professional and contextual email replies.
+
+Your job is to:
+1. Read the original email carefully
+2. Follow the user's instruction exactly
+3. Write a professional, natural reply that sounds like ${userName}
+4. Include appropriate greetings and sign-offs
+5. Keep the tone consistent with the original email
+
+Rules:
+• Always start with an appropriate greeting (e.g., "Hi [Name]," or "Good morning [Name],")
+• Be concise but complete
+• Match the formality level of the original email
+• End with "Best regards, ${userName}" or similar
+• Don't repeat the original email content
+• Focus on directly addressing what was asked in the instruction`;
+
+      const userPrompt = `Original email from ${originalEmail.from}:
+Subject: ${originalEmail.subject}
+
+${cleanBody}
+
+User's instruction: ${instruction}
+
+Write a professional reply following the user's instruction:`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 300,
+      });
+
+      const reply = response.choices[0]?.message?.content?.trim() || 'Sorry, I couldn\'t generate a reply. Please try again.';
+      
+      logger.info(`Generated contextual reply for email from ${originalEmail.from}`);
+      return reply;
+    } catch (error) {
+      logger.error('Error generating contextual reply:', error);
+      return 'Sorry, I had trouble generating a reply. Please try again.';
     }
   }
 

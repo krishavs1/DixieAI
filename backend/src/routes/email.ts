@@ -13,6 +13,35 @@ interface AuthRequest extends express.Request {
 
 const router = express.Router();
 
+// Helper function to create Gmail client with automatic token refresh
+const createGmailClient = (accessToken: string, refreshToken?: string) => {
+  const oauth2Client = new google.auth.OAuth2();
+  
+  // Try with current access token first
+  oauth2Client.setCredentials({ access_token: accessToken });
+  
+  // If that fails, try refreshing the token
+  const tryWithRefresh = async () => {
+    if (refreshToken) {
+      try {
+        oauth2Client.setCredentials({ refresh_token: refreshToken });
+        const { credentials } = await oauth2Client.refreshAccessToken();
+        oauth2Client.setCredentials({ access_token: credentials.access_token });
+        logger.info('Successfully refreshed Google access token');
+      } catch (refreshError) {
+        logger.error('Failed to refresh Google access token:', refreshError);
+        throw new Error('Authentication failed - please log in again');
+      }
+    } else {
+      throw new Error('No refresh token available - please log in again');
+    }
+  };
+  
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  
+  return { gmail, oauth2Client, tryWithRefresh };
+};
+
 // Helper function to add timeout to promises
 const withTimeout = <T>(promise: Promise<T>, timeoutMs: number = 15000): Promise<T> => {
   return Promise.race([
@@ -182,6 +211,105 @@ router.get('/labels', authMiddleware, async (req: AuthRequest, res: express.Resp
   } catch (error) {
     logger.error('Error fetching labels:', error);
     return res.status(500).json({ error: 'Failed to fetch labels' });
+  }
+});
+
+
+
+// Find threads by sender name
+router.get('/threads/by-sender', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { sender } = req.query;
+    
+    if (!sender || typeof sender !== 'string') {
+      return res.status(400).json({ error: 'Sender name is required' });
+    }
+    
+    const { gmail, tryWithRefresh } = createGmailClient(req.user.accessToken, req.user.refreshToken);
+    
+    // Search for emails from this sender - be more flexible with the search
+    // Split the sender name into words and search for any of them
+    const senderWords = sender.split(/\s+/).filter(word => word.length > 2);
+    let searchQuery = senderWords.length > 0 
+      ? `from:(${senderWords.join(' OR ')})`
+      : `from:${sender}`;
+    
+    // If no results, try a broader search
+    if (sender.toLowerCase().includes('trader') || sender.toLowerCase().includes('broker')) {
+      searchQuery = 'from:trader OR from:broker OR from:brokerage';
+    }
+    
+    logger.info(`Searching for emails with query: "${searchQuery}" from sender: "${sender}"`);
+    
+    try {
+      logger.info(`Making Gmail API call: threads.list with query: "${searchQuery}"`);
+      logger.info(`Gmail client object:`, typeof gmail, gmail.users ? 'has users' : 'no users');
+      const threadsResult = await withTimeout(gmail.users.threads.list({
+        userId: 'me',
+        q: searchQuery,
+        maxResults: 10,
+      }));
+
+      if (!threadsResult.data.threads || threadsResult.data.threads.length === 0) {
+        return res.status(404).json({ error: `No emails found from "${sender}"` });
+      }
+
+      // Get the most recent thread from this sender
+      const threadId = threadsResult.data.threads[0].id!;
+      logger.info(`Found thread ID: ${threadId}, now fetching full thread details`);
+      
+      const threadResult = await withTimeout(gmail.users.threads.get({
+        userId: 'me',
+        id: threadId,
+        format: 'full',
+      }));
+
+      const thread = threadResult.data;
+      if (!thread.messages) {
+        return res.status(404).json({ error: 'Thread has no messages' });
+      }
+
+      // Get the latest message in the thread
+      const latestMessage = thread.messages[thread.messages.length - 1];
+      const headers = latestMessage.payload?.headers || [];
+      const fromHeader = headers.find(h => h.name?.toLowerCase() === 'from');
+      const subjectHeader = headers.find(h => h.name?.toLowerCase() === 'subject');
+      
+      // Extract message body
+      const cleanBody = extractEmailBody(latestMessage.payload!);
+      
+      const threadData = {
+        id: threadId,
+        subject: subjectHeader?.value || 'No Subject',
+        from: fromHeader?.value || 'Unknown Sender',
+        snippet: thread.snippet || cleanBody.substring(0, 150) + '...',
+        fullBody: cleanBody,
+        messageCount: thread.messages.length,
+        latestMessage: {
+          id: latestMessage.id,
+          from: fromHeader?.value || 'Unknown Sender',
+          subject: subjectHeader?.value || 'No Subject',
+          body: cleanBody,
+          snippet: latestMessage.snippet || cleanBody.substring(0, 150) + '...',
+        }
+      };
+
+      logger.info(`Found thread from "${sender}": ${threadData.subject}`);
+      return res.json({ thread: threadData });
+
+    } catch (error: any) {
+      if (error.code === 401) {
+        logger.info('Access token expired, attempting refresh...');
+        await tryWithRefresh();
+        // Retry the request with refreshed token
+        throw new Error('Token refreshed, please retry the request');
+      }
+      throw error;
+    }
+
+  } catch (error) {
+    logger.error('Error finding thread by sender:', error);
+    return res.status(500).json({ error: 'Failed to find thread by sender' });
   }
 });
 
@@ -437,11 +565,11 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res: express.Respo
     } else {
       // Simple text email without attachments
       emailContent = [
-        `To: ${to}`,
-        `Subject: ${subject}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
         `Content-Type: text/plain; charset=UTF-8`,
-        '',
-        body,
+      '',
+      body,
       ].join('\n');
     }
     
@@ -634,21 +762,38 @@ router.post('/classify', authMiddleware, async (req: AuthRequest, res: express.R
 // Generate inbox summary
 router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Response) => {
   try {
-    const { accessToken } = req.user;
+    const { accessToken, refreshToken } = req.user;
     
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
-    
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    const { gmail, tryWithRefresh } = createGmailClient(accessToken, refreshToken);
     
     // Get threads (limit to 50 for summary)
-    const threadsResponse = await withTimeout(
-      gmail.users.threads.list({
-        userId: 'me',
-        maxResults: 50,
-      }),
-      10000
-    );
+    let threadsResponse;
+    try {
+      threadsResponse = await withTimeout(
+        gmail.users.threads.list({
+          userId: 'me',
+          maxResults: 50,
+        }),
+        10000
+      );
+    } catch (error: any) {
+      // If we get a 401, try refreshing the token
+      if (error.code === 401 || error.response?.status === 401) {
+        logger.info('Access token expired, attempting to refresh...');
+        await tryWithRefresh();
+        
+        // Retry the request with refreshed token
+        threadsResponse = await withTimeout(
+          gmail.users.threads.list({
+            userId: 'me',
+            maxResults: 50,
+          }),
+          10000
+        );
+      } else {
+        throw error;
+      }
+    }
 
     const threads = threadsResponse.data.threads || [];
     
@@ -712,6 +857,171 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Re
   } catch (error) {
     logger.error('Error generating inbox summary:', error);
     return res.status(500).json({ error: 'Failed to generate inbox summary' });
+  }
+});
+
+// Generate a reply for a specific thread
+router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { sender } = req.query;
+    
+    if (!sender || typeof sender !== 'string') {
+      return res.status(400).json({ error: 'Sender name is required' });
+    }
+    
+    const { gmail, tryWithRefresh } = createGmailClient(req.user.accessToken, req.user.refreshToken);
+    
+    // Search for emails from this sender - be more flexible with the search
+    // Split the sender name into words and search for any of them
+    const senderWords = sender.split(/\s+/).filter(word => word.length > 2);
+    let searchQuery = senderWords.length > 0 
+      ? `from:(${senderWords.join(' OR ')})`
+      : `from:${sender}`;
+    
+    // If no results, try a broader search
+    if (sender.toLowerCase().includes('trader') || sender.toLowerCase().includes('broker')) {
+      searchQuery = 'from:trader OR from:broker OR from:brokerage';
+    }
+    
+    logger.info(`Searching for emails with query: "${searchQuery}" from sender: "${sender}"`);
+    
+    try {
+      logger.info(`Making Gmail API call: threads.list with query: "${searchQuery}"`);
+      logger.info(`Gmail client object:`, typeof gmail, gmail.users ? 'has users' : 'no users');
+      const threadsResult = await withTimeout(gmail.users.threads.list({
+        userId: 'me',
+        q: searchQuery,
+        maxResults: 10,
+      }));
+
+      if (!threadsResult.data.threads || threadsResult.data.threads.length === 0) {
+        return res.status(404).json({ error: `No emails found from "${sender}"` });
+      }
+
+      // Get the most recent thread from this sender
+      const threadId = threadsResult.data.threads[0].id!;
+      logger.info(`Found thread ID: ${threadId}, now fetching full thread details`);
+      
+      const threadResult = await withTimeout(gmail.users.threads.get({
+        userId: 'me',
+        id: threadId,
+        format: 'full',
+      }));
+
+      const thread = threadResult.data;
+      if (!thread.messages) {
+        return res.status(404).json({ error: 'Thread has no messages' });
+      }
+
+      // Get the latest message in the thread
+      const latestMessage = thread.messages[thread.messages.length - 1];
+      const headers = latestMessage.payload?.headers || [];
+      const fromHeader = headers.find(h => h.name?.toLowerCase() === 'from');
+      const subjectHeader = headers.find(h => h.name?.toLowerCase() === 'subject');
+      
+      // Extract message body
+      const cleanBody = extractEmailBody(latestMessage.payload!);
+      
+      const threadData = {
+        id: threadId,
+        subject: subjectHeader?.value || 'No Subject',
+        from: fromHeader?.value || 'Unknown Sender',
+        snippet: thread.snippet || cleanBody.substring(0, 150) + '...',
+        fullBody: cleanBody,
+        messageCount: thread.messages.length,
+        latestMessage: {
+          id: latestMessage.id,
+          from: fromHeader?.value || 'Unknown Sender',
+          subject: subjectHeader?.value || 'No Subject',
+          body: cleanBody,
+          snippet: latestMessage.snippet || cleanBody.substring(0, 150) + '...',
+        }
+      };
+
+      logger.info(`Found thread from "${sender}": ${threadData.subject}`);
+      return res.json({ thread: threadData });
+
+    } catch (error: any) {
+      if (error.code === 401) {
+        logger.info('Access token expired, attempting refresh...');
+        await tryWithRefresh();
+        // Retry the request with refreshed token
+        throw new Error('Token refreshed, please retry the request');
+      }
+      throw error;
+    }
+
+  } catch (error) {
+    logger.error('Error finding thread by sender:', error);
+    return res.status(500).json({ error: 'Failed to find thread by sender' });
+  }
+});
+
+// Generate a reply for a specific thread
+router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { threadId, instruction, senderName } = req.body;
+    
+    if (!threadId || !instruction) {
+      return res.status(400).json({ error: 'Thread ID and instruction are required' });
+    }
+    
+    const { gmail, tryWithRefresh } = createGmailClient(req.user.accessToken, req.user.refreshToken);
+    
+    try {
+      // Get the thread to understand context
+      const threadResult = await withTimeout(gmail.users.threads.get({
+        userId: 'me',
+        id: threadId,
+        format: 'full',
+      }));
+
+      const thread = threadResult.data;
+      if (!thread.messages || thread.messages.length === 0) {
+        return res.status(404).json({ error: 'Thread not found or has no messages' });
+      }
+
+      // Get the latest message for context
+      const latestMessage = thread.messages[thread.messages.length - 1];
+      const headers = latestMessage.payload?.headers || [];
+      const fromHeader = headers.find(h => h.name?.toLowerCase() === 'from');
+      const subjectHeader = headers.find(h => h.name?.toLowerCase() === 'subject');
+      
+      // Extract the email body
+      const cleanBody = extractEmailBody(latestMessage.payload!);
+      
+      // Generate AI reply
+      const replyContent = await AIService.generateContextualReply({
+        originalEmail: {
+          from: fromHeader?.value || senderName || 'Unknown Sender',
+          subject: subjectHeader?.value || 'No Subject',
+          body: cleanBody,
+        },
+        instruction: instruction,
+        userName: req.user.name || 'User',
+      });
+
+      logger.info(`Generated reply for thread ${threadId} with instruction: ${instruction}`);
+      return res.json({ 
+        reply: replyContent,
+        threadId: threadId,
+        originalSubject: subjectHeader?.value || 'No Subject',
+        replyTo: fromHeader?.value || senderName || 'Unknown Sender',
+      });
+
+    } catch (error: any) {
+      if (error.code === 401) {
+        logger.info('Access token expired, attempting refresh...');
+        await tryWithRefresh();
+        // Retry the request with refreshed token
+        throw new Error('Token refreshed, please retry the request');
+      }
+      throw error;
+    }
+
+  } catch (error) {
+    logger.error('Error generating reply:', error);
+    return res.status(500).json({ error: 'Failed to generate reply' });
   }
 });
 
