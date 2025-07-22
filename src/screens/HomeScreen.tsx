@@ -470,6 +470,7 @@ const HomeScreen = () => {
       });
       
       // 0. CONFIRMATION COMMAND - if we're awaiting confirmation
+      console.log('🔍 Confirmation check - awaitingConfirmation:', awaitingConfirmation, 'text:', lowerText);
       if (awaitingConfirmation && (lowerText.includes('yes') || lowerText.includes('send') || lowerText.includes('okay') || lowerText.includes('ok'))) {
         console.log('✅ DETECTED YES CONFIRMATION - Sending email...');
         await handleSendConfirmedReply();
@@ -494,8 +495,9 @@ const HomeScreen = () => {
         await handleReadEmailCommand(text);
       }
       
-      // 3. AUTO REPLY COMMAND - "write a reply to that email" (check this FIRST - more specific)
-      else if (lowerText.includes('write') && lowerText.includes('reply') && (lowerText.includes('that') || lowerText.includes('this'))) {
+      // 3. AUTO REPLY COMMAND - "write a reply to that email" or "reply to that email" (check this FIRST - more specific)
+      else if ((lowerText.includes('write') && lowerText.includes('reply') && (lowerText.includes('that') || lowerText.includes('this'))) ||
+               (lowerText.includes('reply') && (lowerText.includes('that') || lowerText.includes('this')) && !lowerText.includes('write'))) {
         console.log('✅ DETECTED AUTO REPLY COMMAND - Processing...');
         await handleWriteAutoReplyCommand();
       }
@@ -770,11 +772,16 @@ const HomeScreen = () => {
 
   // Handle confirmed send
   const handleSendConfirmedReply = async () => {
+    console.log('🚀 SENDING CONFIRMED REPLY - Starting...');
+    console.log('🔍 Pending reply:', pendingReply);
+    console.log('🔍 Thread to use:', currentThread || currentThreadRef.current);
+    
     setAgentResponse('Sending your reply...');
     
     try {
       // Send the email using the pending reply (use ref as fallback)
       const threadToUse = currentThread || currentThreadRef.current;
+      console.log('🔍 Sending reply to thread:', threadToUse.id);
       await emailService.sendReply(threadToUse.id, pendingReply, token);
       
       // Reset states
