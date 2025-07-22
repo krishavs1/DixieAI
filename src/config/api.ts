@@ -10,9 +10,9 @@ const getBackendURL = async (): Promise<string> => {
   
   // For physical device, try the most likely IPs
   const possibleURLs = [
-    'http://172.20.214.39:3000',  // Your current IP
+    'http://192.168.1.209:3000',  // Your new WiFi IP
+    'http://172.20.214.39:3000',  // Your previous IP
     'http://localhost:3000',      // Fallback
-    'http://192.168.1.209:3000',  // Your previous IP
   ];
   
   // Test each URL

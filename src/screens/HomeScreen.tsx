@@ -582,6 +582,9 @@ const HomeScreen = () => {
     setTimeout(() => {
       console.log('Resetting processing flag');
       setIsProcessingCommand(false);
+      // Reset command processed flag so new commands can be processed
+      commandProcessedRef.current = false;
+      console.log('🔄 Reset commandProcessedRef to false - ready for next command');
     }, 1000);
     
     console.log('=== END PROCESSING VOICE COMMAND ===');
