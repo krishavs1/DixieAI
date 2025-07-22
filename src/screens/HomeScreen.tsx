@@ -86,6 +86,9 @@ const HomeScreen = () => {
   // Wake word detection state
   const [isWakeWordListening, setIsWakeWordListening] = useState(false);
   const wakeWordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [ignoreNextSpeechResult, setIgnoreNextSpeechResult] = useState(false);
+  const wakeWordJustDetectedRef = useRef(false);
+  const justStartedListeningRef = useRef(false);
   
 
 
@@ -947,10 +950,14 @@ const HomeScreen = () => {
     // Finally close the modal
     setShowVoiceAgent(false);
     
+    // Reset wake word detection flag
+    wakeWordJustDetectedRef.current = false;
+    
     // Restart background listening after closing voice agent
     setTimeout(() => {
+      console.log('🎧 Restarting background listening after voice agent closed...');
       startBackgroundListening();
-    }, 1000);
+    }, 1500); // Increased delay to ensure voice agent is fully closed
     
     console.log('🚨 EMERGENCY SHUTDOWN COMPLETE');
   };
@@ -1054,9 +1061,10 @@ const HomeScreen = () => {
   };
 
   const onSpeechResults = (event: any) => {
-    console.log('Speech results received:', event);
-    console.log('🔍 Speech results - isWakeWordListening:', isWakeWordListening);
-    console.log('🔍 Speech results - showVoiceAgent:', showVoiceAgent);
+    try {
+      console.log('Speech results received:', event);
+      console.log('🔍 Speech results - isWakeWordListening:', isWakeWordListening);
+      console.log('🔍 Speech results - showVoiceAgent:', showVoiceAgent);
     
     // If we're in wake word detection mode, use wake word handler
     if (isWakeWordListening) {
@@ -1066,20 +1074,35 @@ const HomeScreen = () => {
     }
     
     // Check for wake word when voice agent is not open
-    if (!showVoiceAgent) {
+    if (!showVoiceAgent && !wakeWordJustDetectedRef.current) {
       const results = event.value || [];
       const text = results[0]?.toLowerCase() || '';
       console.log('🔍 Checking for wake word in background:', text);
       
       if (text.includes('yo dixie') || text.includes('hey dixie') || text.includes('hello dixie')) {
         console.log('🎯 WAKE WORD DETECTED IN BACKGROUND! Opening voice agent...');
+        wakeWordJustDetectedRef.current = true;
         
-        // Open voice agent
+        // Stop background listening first
+        stopBackgroundListening();
+        
+        // Set flag to ignore the next speech result (which will be the wake word)
+        setIgnoreNextSpeechResult(true);
+        console.log('🚫 Set ignoreNextSpeechResult to true');
+        
+        // Open voice agent immediately
         setShowVoiceAgent(true);
-        setAgentResponse('Voice agent ready! Tap the mic to start listening.');
+        setAgentResponse('Voice agent ready! Starting listening...');
         setIsVoiceAgentClosed(false);
         setSpeechKillSwitch(false);
         speechKillSwitchRef.current = false;
+        
+        // Automatically start listening after a short delay
+        setTimeout(() => {
+          console.log('🎤 Auto-starting listening after wake word...');
+          startListening();
+        }, 1000); // Increased delay to ensure background listening is fully stopped
+        
         return;
       }
     }
@@ -1093,6 +1116,21 @@ const HomeScreen = () => {
     // Don't process results if we're already processing a command
     if (isProcessingCommand) {
       console.log('Already processing command, ignoring speech results');
+      return;
+    }
+    
+    // Don't process results if wake word was just detected
+    if (wakeWordJustDetectedRef.current) {
+      console.log('🚫 Wake word just detected, ignoring speech results until listening starts');
+      return;
+    }
+    
+    // Check if we should ignore this speech result (wake word)
+    if (ignoreNextSpeechResult) {
+      console.log('🚫 Ignoring speech result (wake word):', event.value);
+      console.log('🚫 Current ignoreNextSpeechResult state:', ignoreNextSpeechResult);
+      setIgnoreNextSpeechResult(false);
+      console.log('🚫 Reset ignoreNextSpeechResult to false');
       return;
     }
     
@@ -1113,7 +1151,7 @@ const HomeScreen = () => {
       
       // Set a new silence timeout - this will process the FINAL transcript
       const newTimeout = setTimeout(() => {
-        if (isListeningRef.current && !isProcessingCommand) {
+        if (isListeningRef.current && !isProcessingCommand && !justStartedListeningRef.current) {
           console.log('🔥 SILENCE TIMEOUT REACHED - Processing final transcript');
           setIsListening(false);
           setListeningAnimation(false);
@@ -1134,13 +1172,20 @@ const HomeScreen = () => {
           // Process the command with the final recognized text from ref
           const finalText = finalRecognizedTextRef.current;
           console.log('🔥 Processing FINAL transcript after silence timeout:', finalText);
-          if (finalText && finalText !== 'Listening...') {
+          if (finalText && finalText !== 'Listening...' && finalText.trim() !== '') {
             processVoiceCommand(finalText);
+          } else {
+            console.log('🔥 No valid text to process, just stopping listening');
+            // Don't process empty text, just stop listening
           }
         }
-      }, 2500); // 2.5 second silence timeout
+      }, 3000); // Increased to 3 second silence timeout
       
       setSilenceTimeout(newTimeout);
+    }
+    } catch (error) {
+      console.error('Error in onSpeechResults:', error);
+      // Don't crash the app, just log the error
     }
   };
 
@@ -1178,6 +1223,13 @@ const HomeScreen = () => {
       setVoiceText('Listening...');
       setAgentResponse('');
       isListeningRef.current = true;
+      justStartedListeningRef.current = true;
+      
+      // Clear the just started flag after 2 seconds
+      setTimeout(() => {
+        justStartedListeningRef.current = false;
+        console.log('🎤 Cleared justStartedListeningRef flag');
+      }, 2000);
       
       // Start pulsing animation
       Animated.loop(
@@ -1206,14 +1258,18 @@ const HomeScreen = () => {
           console.log('No existing recognition to stop');
         }
         
-        // Start voice recognition
-        await Voice.start('en-US');
-      } else {
-        console.log('Voice module not available - using fallback');
-        setVoiceText('Voice recognition not available. Please type your command.');
-        setIsListening(false);
-        setListeningAnimation(false);
-      }
+              // Start voice recognition
+      await Voice.start('en-US');
+      
+      // Reset wake word flag now that we're actively listening
+      wakeWordJustDetectedRef.current = false;
+      console.log('🎤 Reset wakeWordJustDetectedRef to false - now actively listening');
+    } else {
+      console.log('Voice module not available - using fallback');
+      setVoiceText('Voice recognition not available. Please type your command.');
+      setIsListening(false);
+      setListeningAnimation(false);
+    }
     } catch (error) {
       console.error('Error starting voice recognition:', error);
       setVoiceText('Error starting voice recognition. Please try again.');
