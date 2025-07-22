@@ -64,6 +64,9 @@ const HomeScreen = () => {
   const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
   const [isProcessingCommand, setIsProcessingCommand] = useState(false);
   const [silenceTimeout, setSilenceTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [isVoiceAgentClosed, setIsVoiceAgentClosed] = useState(false);
+  const [speechKillSwitch, setSpeechKillSwitch] = useState(false);
+  const speechKillSwitchRef = useRef(false);
   const isListeningRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useState(new Animated.Value(-300))[0];
@@ -413,6 +416,9 @@ const HomeScreen = () => {
     try {
       setShowVoiceAgent(true);
       setAgentResponse('Voice agent ready! Tap the mic to start listening.');
+      setIsVoiceAgentClosed(false); // Reset the closed flag
+      setSpeechKillSwitch(false); // Reset the kill switch
+      speechKillSwitchRef.current = false; // Reset kill switch ref
       console.log('✅ Voice agent state set to true');
     } catch (error) {
       console.log('❌ Error showing voice agent:', error);
@@ -490,6 +496,7 @@ const HomeScreen = () => {
     if (Speech && typeof Speech.speak === 'function') {
       console.log('Speaking response via Speech');
       setIsTtsSpeaking(true);
+      setSpeechKillSwitch(false); // Reset kill switch
       
       // Add natural speech patterns and pauses
       const conversationalText = text
@@ -500,11 +507,18 @@ const HomeScreen = () => {
       
       // Wait a moment before speaking
       setTimeout(async () => {
+        // Check kill switch before speaking - CHECK REF FIRST
+        if (speechKillSwitchRef.current || speechKillSwitch || isVoiceAgentClosed) {
+          console.log('🛑 Speech cancelled by kill switch - REF:', speechKillSwitchRef.current, 'STATE:', speechKillSwitch);
+          setIsTtsSpeaking(false);
+          return;
+        }
+        
         try {
           await Speech.speak(conversationalText, {
             language: 'en-US',
             pitch: 1.0,
-            rate: 1.2,
+            rate: 1.0,
             onDone: () => {
               console.log('Speech completed successfully');
               setIsTtsSpeaking(false);
@@ -515,6 +529,12 @@ const HomeScreen = () => {
             },
             onStart: () => {
               console.log('Speech started successfully');
+              // Check kill switch right after speech starts - CHECK REF FIRST
+              if (speechKillSwitchRef.current || speechKillSwitch || isVoiceAgentClosed) {
+                console.log('🛑 Killing speech immediately after start - REF:', speechKillSwitchRef.current, 'STATE:', speechKillSwitch);
+                Speech.stop();
+                setIsTtsSpeaking(false);
+              }
             },
             onStopped: () => {
               console.log('Speech was stopped');
@@ -666,19 +686,83 @@ const HomeScreen = () => {
   };
 
   const closeVoiceAgent = () => {
-    console.log('Closing voice agent and cleaning up...');
-    setShowVoiceAgent(false);
+    console.log('🚨 EMERGENCY SHUTDOWN - Closing voice agent and cleaning up...');
+    
+    // ACTIVATE KILL SWITCH IMMEDIATELY - USE REF FOR INSTANT UPDATE
+    speechKillSwitchRef.current = true;
+    setSpeechKillSwitch(true);
+    setIsVoiceAgentClosed(true);
+    
+    console.log('🛑 KILL SWITCH ACTIVATED - speechKillSwitchRef.current =', speechKillSwitchRef.current);
+    
+    // NUCLEAR OPTION - Stop speech multiple ways
+    try {
+      // Method 1: Direct stop
+      Speech.stop();
+      console.log('Method 1: Direct Speech.stop() called');
+      
+      // Method 2: Restart with empty text to interrupt
+      Speech.speak('', {
+        language: 'en-US',
+        pitch: 0.1,
+        rate: 10,
+        onStart: () => { Speech.stop(); },
+        onError: () => { Speech.stop(); },
+      });
+      console.log('Method 2: Empty speech interruption');
+      
+      // Method 3: Multiple stops with delays
+      setTimeout(() => Speech.stop(), 10);
+      setTimeout(() => Speech.stop(), 50);
+      setTimeout(() => Speech.stop(), 100);
+      setTimeout(() => Speech.stop(), 200);
+      setTimeout(() => Speech.stop(), 500);
+      
+      console.log('Method 3: Multiple delayed stops scheduled');
+    } catch (error) {
+      console.log('Error in nuclear speech stop:', error);
+    }
+    
+    // AGGRESSIVELY stop voice recognition
+    if (Voice && typeof Voice.stop === 'function') {
+      try {
+        Voice.stop();
+        Voice.destroy && Voice.destroy();
+        console.log('Voice recognition stopped and destroyed');
+      } catch (error) {
+        console.log('Error stopping voice recognition:', error);
+      }
+    }
+    
+    // Clear any existing silence timeout
+    if (silenceTimeout) {
+      clearTimeout(silenceTimeout);
+      setSilenceTimeout(null);
+    }
+    
+    // Reset all voice-related states
+    setIsListening(false);
+    setListeningAnimation(false);
+    setIsProcessingCommand(false);
+    setVoiceText('');
     setAgentResponse('');
     setVoiceInput('');
     setIsAgentProcessing(false);
-    
-    // Stop voice recognition and clean up
-    stopListening();
-    
-    // Reset TTS speaking state
     setIsTtsSpeaking(false);
     
-
+    // Stop any animations
+    if (pulseAnim) {
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+    }
+    
+    // Update the ref
+    isListeningRef.current = false;
+    
+    // Finally close the modal
+    setShowVoiceAgent(false);
+    
+    console.log('🚨 EMERGENCY SHUTDOWN COMPLETE');
   };
 
   // Voice recognition event handlers
@@ -750,6 +834,12 @@ const HomeScreen = () => {
   const onSpeechResults = (event: any) => {
     console.log('Speech results received:', event);
     
+    // Don't process results if voice agent is closed
+    if (isVoiceAgentClosed) {
+      console.log('Voice agent is closed, ignoring speech results');
+      return;
+    }
+    
     // Don't process results if we're already processing a command
     if (isProcessingCommand) {
       console.log('Already processing command, ignoring speech results');
@@ -805,6 +895,11 @@ const HomeScreen = () => {
   };
 
   const onSpeechPartialResults = (event: any) => {
+    // Don't process results if voice agent is closed
+    if (isVoiceAgentClosed) {
+      return;
+    }
+    
     const results = event.value;
     if (results && results.length > 0) {
       setVoiceText(results[0]);
@@ -838,7 +933,7 @@ const HomeScreen = () => {
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.2,
+            toValue: 1.0,
             duration: 1000,
             useNativeDriver: true,
           }),
@@ -1563,7 +1658,7 @@ const HomeScreen = () => {
         visible={showVoiceAgent}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowVoiceAgent(false)}
+        onRequestClose={closeVoiceAgent}
       >
         <View style={styles.voiceAgentOverlay}>
           <View style={styles.voiceAgentContainer}>
@@ -1592,7 +1687,7 @@ const HomeScreen = () => {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  onPress={() => setShowVoiceAgent(false)}
+                  onPress={closeVoiceAgent}
                   style={styles.voiceAgentCloseButton}
                 >
                   <Ionicons name="close" size={20} color="#666" />
