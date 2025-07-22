@@ -90,6 +90,7 @@ const HomeScreen = () => {
   const wakeWordJustDetectedRef = useRef(false);
   const justStartedListeningRef = useRef(false);
   const commandProcessedRef = useRef(false);
+  const voiceAgentOpenRef = useRef(false);
   
 
 
@@ -967,6 +968,9 @@ const HomeScreen = () => {
     // Reset command processed flag
     commandProcessedRef.current = false;
     
+    // Reset voice agent open flag
+    voiceAgentOpenRef.current = false;
+    
     // Restart background listening after closing voice agent
     setTimeout(() => {
       console.log('🎧 Restarting background listening after voice agent closed...');
@@ -1106,6 +1110,7 @@ const HomeScreen = () => {
         
         // Open voice agent immediately
         setShowVoiceAgent(true);
+        voiceAgentOpenRef.current = true;
         setAgentResponse('Voice agent ready! Starting listening...');
         setIsVoiceAgentClosed(false);
         setSpeechKillSwitch(false);
@@ -1114,7 +1119,41 @@ const HomeScreen = () => {
         // Automatically start listening after a short delay
         setTimeout(() => {
           console.log('🎤 Auto-starting listening after wake word...');
-          startListening();
+          
+          // Play a "Ready!" sound and start listening when it completes
+          if (Speech && typeof Speech.speak === 'function') {
+            console.log('🎤 Speaking "Ready!" before starting to listen...');
+            setIsTtsSpeaking(true);
+            
+            Speech.speak('Ready!', {
+              language: 'en-US',
+              pitch: 1.0,
+              rate: 1.0,
+              onDone: () => {
+                console.log('🎤 "Ready!" completed, starting to listen...');
+                setIsTtsSpeaking(false);
+                startListening();
+              },
+              onError: (error: any) => {
+                console.error('Speech error:', error);
+                setIsTtsSpeaking(false);
+                startListening(); // Start listening even if speech fails
+              },
+              onStart: () => {
+                console.log('🎤 "Ready!" started speaking...');
+              },
+              onStopped: () => {
+                console.log('🎤 "Ready!" was stopped');
+                setIsTtsSpeaking(false);
+                startListening();
+              },
+            });
+          } else {
+            // Fallback if speech is not available
+            console.log('🎤 Speech not available, starting to listen immediately...');
+            startListening();
+          }
+          
         }, 1000); // Increased delay to ensure background listening is fully stopped
         
         return;
@@ -1122,8 +1161,8 @@ const HomeScreen = () => {
     }
     
     // Don't process results if voice agent is closed
-    if (isVoiceAgentClosed) {
-      console.log('Voice agent is closed, ignoring speech results');
+    if (isVoiceAgentClosed || !voiceAgentOpenRef.current) {
+      console.log('Voice agent is closed or not open, ignoring speech results');
       return;
     }
     
