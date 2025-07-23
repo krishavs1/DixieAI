@@ -61,7 +61,7 @@ export interface DetailedEmailThread {
   labels?: string[]; // Array of label IDs
 }
 
-export type EmailCategory = 'primary' | 'social' | 'promotions' | 'updates' | 'sent';
+export type EmailCategory = 'all' | 'primary' | 'social' | 'promotions' | 'updates' | 'sent';
 
 export interface EmailCategoryInfo {
   id: EmailCategory;
@@ -92,21 +92,33 @@ export const SYSTEM_LABELS: EmailLabel[] = [
 
 // Helper function to create a fetch with timeout
 const fetchWithTimeout = async (url: string, options: RequestInit, timeout: number = API_CONFIG.TIMEOUT) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  // If a signal is already provided in options, use it; otherwise create a timeout controller
+  const hasExistingSignal = options.signal !== undefined;
+  const controller = hasExistingSignal ? null : new AbortController();
+  const timeoutId = hasExistingSignal ? null : setTimeout(() => controller!.abort(), timeout);
+
+  console.log('🌐 fetchWithTimeout called with signal:', options.signal, 'hasExistingSignal:', hasExistingSignal);
 
   try {
     const response = await fetch(url, {
       ...options,
-      signal: controller.signal,
+      signal: hasExistingSignal ? options.signal : controller!.signal,
     });
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
+    console.log('✅ fetchWithTimeout completed successfully');
     return response;
   } catch (error) {
-    clearTimeout(timeoutId);
+    if (timeoutId) clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Request timed out');
+      console.log('🛑 Request was aborted:', error.message);
+      // Check if it was aborted by our wake word signal or by timeout
+      if (hasExistingSignal) {
+        throw error; // Re-throw the original AbortError for wake word cancellation
+      } else {
+        throw new Error('Request timed out');
+      }
     }
+    console.log('❌ fetchWithTimeout error:', error);
     throw error;
   }
 };
@@ -124,6 +136,11 @@ const retryFetch = async (
       return await fetchFn();
     } catch (error) {
       lastError = error as Error;
+      
+      // If it's an AbortError, don't retry - just throw it immediately
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
       
       if (attempt === maxRetries) {
         throw lastError;
@@ -287,6 +304,11 @@ export const emailService = {
         return 'updates';
       }
       if (thread.labels.includes('CATEGORY_PERSONAL')) {
+        return 'primary';
+      }
+      
+      // If it has INBOX label but no specific category, it's primary
+      if (thread.labels.includes('INBOX')) {
         return 'primary';
       }
     }
@@ -491,18 +513,41 @@ export const emailService = {
     }
   },
 
-  async generateInboxSummary(token: string): Promise<string> {
+  async generateInboxSummary(token: string, cancellationFlag?: React.RefObject<boolean>): Promise<string> {
+    let cancellationInterval: number | null = null;
+    
     try {
+      console.log('📡 generateInboxSummary called with cancellationFlag:', cancellationFlag?.current);
       const baseURL = await getBaseURL();
-      const response = await retryFetch(() =>
-        fetchWithTimeout(`${baseURL}/api/email/summary`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }, API_CONFIG.TIMEOUT)
-      );
+      
+      // Check cancellation flag before making request
+      if (cancellationFlag?.current) {
+        console.log('🛑 Request cancelled before starting');
+        throw new Error('Request cancelled');
+      }
+      
+      // Create AbortController for this request
+      const abortController = new AbortController();
+      
+      // Set up a watcher to abort the request if cancellation flag is set
+      const checkCancellation = () => {
+        if (cancellationFlag?.current) {
+          console.log('🛑 Cancellation detected, aborting request');
+          abortController.abort();
+        }
+      };
+      
+      // Check cancellation every 100ms
+      cancellationInterval = setInterval(checkCancellation, 100);
+      
+      const response = await fetchWithTimeout(`${baseURL}/api/email/summary`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        signal: abortController.signal, // Add abort signal
+      }, API_CONFIG.TIMEOUT);
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -513,8 +558,31 @@ export const emailService = {
       }
 
       const data = await response.json();
+      
+      // Clear the cancellation interval
+      if (cancellationInterval) {
+        clearInterval(cancellationInterval);
+      }
+      
+      // Check cancellation flag before returning
+      if (cancellationFlag?.current) {
+        console.log('🛑 Summary generation was cancelled before returning');
+        throw new Error('Request cancelled');
+      }
+      
       return data.summary || 'Unable to generate summary';
     } catch (error) {
+      // Clear the cancellation interval on error
+      if (cancellationInterval) {
+        clearInterval(cancellationInterval);
+      }
+      
+      // Check if it's an abort error
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('🛑 Request was aborted');
+        throw new Error('Request cancelled');
+      }
+      
       console.error('Error generating inbox summary:', error);
       throw error;
     }
@@ -593,13 +661,15 @@ export const emailService = {
       
       console.log(`🔍 Finding emails from: ${senderName}`);
       
-      const response = await fetchWithTimeout(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }, API_CONFIG.TIMEOUT);
+      const response = await retryFetch(() =>
+        fetchWithTimeout(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }, API_CONFIG.TIMEOUT)
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -626,17 +696,19 @@ export const emailService = {
       
       console.log(`🔄 Converting HTML to clean text`);
       
-      const response = await fetchWithTimeout(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          htmlContent,
-          subject,
-        }),
-      }, API_CONFIG.TIMEOUT);
+      const response = await retryFetch(() =>
+        fetchWithTimeout(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            htmlContent,
+            subject,
+          }),
+        }, API_CONFIG.TIMEOUT)
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -751,4 +823,6 @@ export const emailService = {
       throw error;
     }
   },
+
+
 }; 

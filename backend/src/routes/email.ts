@@ -86,7 +86,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     
     const response = await gmail.users.threads.list({
       userId: 'me',
-      maxResults: 50, // Increased from 20 to 50 threads
+      maxResults: 50, // Increased to 50 threads
       q: req.query.q as string || '',
     });
 
@@ -94,7 +94,12 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     
     // Use batch requests to get thread metadata more efficiently
     const threadsWithPreview = await Promise.allSettled(
-      threads.map(async (thread) => { // Process all 50 threads
+      threads.map(async (thread, index) => { // Process all 8 threads
+        // Add delay between requests to avoid overwhelming Gmail API
+        if (index > 0) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Much longer delay
+        }
+        
         // Extract display name from "Display Name <email@domain.com>" format
         const extractDisplayName = (fromField: string): string => {
           if (!fromField) return '';
@@ -118,12 +123,12 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
         try {
           const threadData = await withTimeout(
             gmail.users.threads.get({
-            userId: 'me',
-            id: thread.id!,
-            format: 'metadata',
-            metadataHeaders: ['From', 'Subject', 'Date'],
+              userId: 'me',
+              id: thread.id!,
+              format: 'metadata',
+              metadataHeaders: ['From', 'Subject', 'Date'],
             }),
-            15000 // 15 second timeout for each thread metadata request (increased for 50 threads)
+            5000 // Much longer timeout - 5 seconds
           );
 
           const messages = threadData.data.messages || [];
@@ -157,12 +162,12 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
           return {
             id: thread.id,
             snippet: he.decode(thread.snippet || ''),
-            from: extractDisplayName(''),
-            subject: '',
-            date: '',
-            messageCount: 0,
+            from: 'Unknown Sender',
+            subject: thread.snippet ? thread.snippet.substring(0, 50) + '...' : '(No Subject)',
+            date: new Date().toISOString(),
+            messageCount: 1,
             read: true, // Default to read if we can't determine
-            labels: [],
+            labels: ['INBOX'],
           };
         }
       })
@@ -194,7 +199,7 @@ router.get('/labels', authMiddleware, async (req: AuthRequest, res: express.Resp
       gmail.users.labels.list({
         userId: 'me',
       }),
-      10000 // 10 second timeout for labels
+      5000 // Reduced to 5 second timeout for labels
     );
 
     const labels = response.data.labels || [];
@@ -759,8 +764,14 @@ router.post('/classify', authMiddleware, async (req: AuthRequest, res: express.R
   }
 });
 
+// Store active summary requests for cancellation
+const activeSummaryRequests = new Map<string, { res: express.Response, cancelled: boolean }>();
+
 // Generate inbox summary
 router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+  const requestId = Math.random().toString(36).substring(7);
+  activeSummaryRequests.set(requestId, { res, cancelled: false });
+  
   try {
     const { accessToken, refreshToken } = req.user;
     
@@ -840,6 +851,14 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Re
       .filter(result => result.status === 'fulfilled' && result.value)
       .map(result => (result as PromiseFulfilledResult<any>).value);
 
+    // Check if request was cancelled
+    const requestInfo = activeSummaryRequests.get(requestId);
+    if (requestInfo?.cancelled) {
+      logger.info(`Summary request ${requestId} was cancelled`);
+      activeSummaryRequests.delete(requestId);
+      return res.status(499).json({ error: 'Request cancelled' });
+    }
+
     // Classify emails first
     const emailsToClassify: EmailContent[] = validThreads.map(thread => ({
       subject: thread.subject,
@@ -849,14 +868,53 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Re
 
     const classifications = await AIService.classifyBatch(emailsToClassify);
     
+    // Check again if request was cancelled after classification
+    if (requestInfo?.cancelled) {
+      logger.info(`Summary request ${requestId} was cancelled after classification`);
+      activeSummaryRequests.delete(requestId);
+      return res.status(499).json({ error: 'Request cancelled' });
+    }
+    
     // Generate summary
     const summary = await AIService.generateInboxSummary(validThreads, classifications);
     
+    // Check one more time before sending response
+    if (requestInfo?.cancelled) {
+      logger.info(`Summary request ${requestId} was cancelled before sending response`);
+      activeSummaryRequests.delete(requestId);
+      return res.status(499).json({ error: 'Request cancelled' });
+    }
+    
     logger.info(`Generated inbox summary for ${validThreads.length} threads`);
+    activeSummaryRequests.delete(requestId);
     return res.json({ summary });
   } catch (error) {
     logger.error('Error generating inbox summary:', error);
+    activeSummaryRequests.delete(requestId);
     return res.status(500).json({ error: 'Failed to generate inbox summary' });
+  }
+});
+
+// Cancel summary request
+router.post('/summary/cancel', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+  try {
+    const { requestId } = req.body;
+    
+    if (!requestId) {
+      return res.status(400).json({ error: 'Request ID is required' });
+    }
+    
+    const requestInfo = activeSummaryRequests.get(requestId);
+    if (requestInfo) {
+      requestInfo.cancelled = true;
+      logger.info(`Cancelled summary request ${requestId}`);
+      return res.json({ success: true, message: 'Request cancelled' });
+    } else {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+  } catch (error) {
+    logger.error('Error cancelling summary request:', error);
+    return res.status(500).json({ error: 'Failed to cancel request' });
   }
 });
 
