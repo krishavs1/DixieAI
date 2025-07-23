@@ -97,6 +97,15 @@ const HomeScreen = () => {
   // Global cancellation flag - when true, all processing should stop immediately
   const globalCancellationFlagRef = useRef(false);
   
+  // Prevent multiple simultaneous wake word detection calls
+  const wakeWordDetectionInProgressRef = useRef(false);
+  
+  // Ref to track confirmation state more reliably (prevents state loss during re-renders)
+  const awaitingConfirmationRef = useRef(false);
+  
+  // Ref to track pending reply more reliably (prevents state loss during re-renders)
+  const pendingReplyRef = useRef('');
+  
 
 
   if (!authContext) {
@@ -484,8 +493,27 @@ const HomeScreen = () => {
     console.log('🎧 isWakeWordListening:', isWakeWordListening);
     console.log('🎧 Voice available:', !!Voice);
     
+    // Prevent multiple simultaneous calls
+    if (wakeWordDetectionInProgressRef.current) {
+      console.log('🎧 Wake word detection already in progress, skipping');
+      return;
+    }
+    
     if (isWakeWordListening || !Voice) {
       console.log('🎧 Skipping wake word detection - already listening or Voice not available');
+      return;
+    }
+    
+    // Set flag to prevent multiple calls
+    wakeWordDetectionInProgressRef.current = true;
+    
+    // Add a small delay to prevent rapid successive calls
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Double-check state after delay
+    if (isWakeWordListening) {
+      console.log('🎧 Still listening after delay, skipping');
+      wakeWordDetectionInProgressRef.current = false;
       return;
     }
     
@@ -493,11 +521,41 @@ const HomeScreen = () => {
     setIsWakeWordListening(true);
     
     try {
+      // Stop any existing recognition first
+      try {
+        await Voice.stop();
+        console.log('🎧 Stopped existing recognition before starting');
+      } catch (stopError) {
+        // Ignore stop errors
+      }
+      
+      // Add a small delay before starting new recognition
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
       await Voice.start('en-US');
       console.log('✅ Wake word detection started');
     } catch (error) {
       console.error('❌ Error starting wake word detection:', error);
       setIsWakeWordListening(false);
+      
+      // If it's an "already started" error, try to recover
+      if (error && typeof error === 'object' && 'error' in error && 
+          error.error && typeof error.error === 'object' && 'message' in error.error &&
+          typeof error.error.message === 'string' && error.error.message.includes('already started')) {
+        console.log('🎧 Attempting to recover from "already started" error...');
+        try {
+          await Voice.stop();
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await Voice.start('en-US');
+          console.log('✅ Wake word detection recovered successfully');
+          setIsWakeWordListening(true);
+        } catch (recoveryError) {
+          console.error('❌ Recovery failed:', recoveryError);
+        }
+      }
+    } finally {
+      // Always reset the flag
+      wakeWordDetectionInProgressRef.current = false;
     }
   };
 
@@ -507,6 +565,7 @@ const HomeScreen = () => {
     
     console.log('🛑 Stopping wake word detection...');
     setIsWakeWordListening(false);
+    wakeWordDetectionInProgressRef.current = false; // Reset the flag
     
     try {
       await Voice.stop();
@@ -604,15 +663,38 @@ const HomeScreen = () => {
             });
             
             // 0. CONFIRMATION COMMAND - if we're awaiting confirmation
-            console.log('🔍 Confirmation check - awaitingConfirmation:', awaitingConfirmation, 'text:', lowerText);
-            if (awaitingConfirmation && (lowerText.includes('yes') || lowerText.includes('send') || lowerText.includes('okay') || lowerText.includes('ok'))) {
+            console.log('🔍 Confirmation check - awaitingConfirmation:', awaitingConfirmation, 'ref:', awaitingConfirmationRef.current, 'text:', lowerText, 'pendingReply:', pendingReply ? 'exists' : 'none', 'pendingReplyRef:', pendingReplyRef.current ? 'exists' : 'none');
+            
+            // Check both state and ref for confirmation
+            const isAwaitingConfirmation = awaitingConfirmation || awaitingConfirmationRef.current;
+            const hasPendingReply = pendingReply || pendingReplyRef.current;
+            
+            if (isAwaitingConfirmation && (lowerText.includes('yes') || lowerText.includes('send') || lowerText.includes('okay') || lowerText.includes('ok'))) {
               console.log('✅ DETECTED YES CONFIRMATION - Sending email...');
               await handleSendConfirmedReply();
               return;
             }
             
-            if (awaitingConfirmation && (lowerText.includes('no') || lowerText.includes('cancel') || lowerText.includes('don\'t'))) {
+            // Fallback: If we have a pending reply but confirmation state is lost, still allow confirmation
+            if (hasPendingReply && (lowerText.includes('yes') || lowerText.includes('send') || lowerText.includes('okay') || lowerText.includes('ok'))) {
+              console.log('✅ DETECTED YES CONFIRMATION (fallback) - Sending email...');
+              setAwaitingConfirmation(true); // Restore the state
+              awaitingConfirmationRef.current = true; // Restore the ref
+              await handleSendConfirmedReply();
+              return;
+            }
+            
+            if (isAwaitingConfirmation && (lowerText.includes('no') || lowerText.includes('cancel') || lowerText.includes('don\'t'))) {
               console.log('✅ DETECTED NO CONFIRMATION - Cancelling email...');
+              await handleCancelReply();
+              return;
+            }
+            
+            // Fallback: If we have a pending reply but confirmation state is lost, still allow cancellation
+            if (hasPendingReply && (lowerText.includes('no') || lowerText.includes('cancel') || lowerText.includes('don\'t'))) {
+              console.log('✅ DETECTED NO CONFIRMATION (fallback) - Cancelling email...');
+              setAwaitingConfirmation(true); // Restore the state
+              awaitingConfirmationRef.current = true; // Restore the ref
               await handleCancelReply();
               return;
             }
@@ -671,7 +753,12 @@ const HomeScreen = () => {
             pulseAnim.setValue(1);
             
             // Keep voice agent open and ready for next command
-            setAgentResponse('Ready for your next command...');
+            // Only set "Ready for your next command..." if the response is still a processing message
+            // This prevents overwriting actual responses like summaries, email content, etc.
+            const currentResponse = agentResponse;
+            if (currentResponse === 'Processing your request...' || currentResponse === 'Generating inbox summary...' || currentResponse === 'Looking for that email...') {
+              setAgentResponse('Ready for your next command...');
+            }
             
             // Restart wake word detection after command processing is complete
             console.log('🎧 Restarting wake word detection after command processing...');
@@ -992,7 +1079,9 @@ const HomeScreen = () => {
       
       // Store the pending reply
       setPendingReply(replyDraft);
+      pendingReplyRef.current = replyDraft; // Also set the ref for reliability
       setAwaitingConfirmation(true);
+      awaitingConfirmationRef.current = true; // Also set the ref for reliability
       
       // Ask for confirmation
       const confirmationMessage = `Your reply says: ${replyDraft}. Can I send it?`;
@@ -1012,19 +1101,29 @@ const HomeScreen = () => {
   const handleSendConfirmedReply = async () => {
     console.log('🚀 SENDING CONFIRMED REPLY - Starting...');
     console.log('🔍 Pending reply:', pendingReply);
+    console.log('🔍 Pending reply ref:', pendingReplyRef.current);
     console.log('🔍 Thread to use:', currentThread || currentThreadRef.current);
     
     setAgentResponse('Sending your reply...');
     
     try {
-      // Send the email using the pending reply (use ref as fallback)
+      // Send the email using the pending reply (use ref as fallback if state is lost)
       const threadToUse = currentThread || currentThreadRef.current;
+      const replyToSend = pendingReply || pendingReplyRef.current;
+      
+      if (!replyToSend) {
+        throw new Error('No reply content available');
+      }
+      
       console.log('🔍 Sending reply to thread:', threadToUse.id);
-      await emailService.sendReply(threadToUse.id, pendingReply, token);
+      console.log('🔍 Reply content length:', replyToSend.length);
+      await emailService.sendReply(threadToUse.id, replyToSend, token);
       
       // Reset states
       setPendingReply('');
+      pendingReplyRef.current = ''; // Also reset the ref
       setAwaitingConfirmation(false);
+      awaitingConfirmationRef.current = false; // Also reset the ref
       
       const successMsg = "Reply sent successfully!";
       setAgentResponse(successMsg);
@@ -1046,7 +1145,9 @@ const HomeScreen = () => {
   // Handle cancelled reply
   const handleCancelReply = async () => {
     setPendingReply('');
+    pendingReplyRef.current = ''; // Also reset the ref
     setAwaitingConfirmation(false);
+    awaitingConfirmationRef.current = false; // Also reset the ref
     
     const cancelMsg = "Okay, I've cancelled the reply.";
     setAgentResponse(cancelMsg);
@@ -1213,8 +1314,15 @@ const HomeScreen = () => {
         speechKillSwitchRef.current = true;
         console.log('🛑 EMERGENCY STOP - Set speech kill switch to true');
         
-        // Clear any pending responses
-        setAgentResponse('');
+        // Clear any pending responses, but preserve meaningful responses like summaries
+        const currentResponse = agentResponse;
+        if (!currentResponse || 
+            currentResponse === 'Processing your request...' || 
+            currentResponse === 'Generating inbox summary...' || 
+            currentResponse === 'Looking for that email...' ||
+            currentResponse === 'Ready for your next command...') {
+          setAgentResponse('');
+        }
         setVoiceText('');
         
         // Stop any ongoing API calls by setting a flag that prevents new ones
@@ -1298,15 +1406,79 @@ const HomeScreen = () => {
     }
   };
 
+  // Reset all voice agent flags
+  const resetVoiceAgentFlags = () => {
+    console.log('🔄 Resetting all voice agent flags...');
+    wakeWordDetectionInProgressRef.current = false;
+    wakeWordJustDetectedRef.current = false;
+    justStartedListeningRef.current = false;
+    commandProcessedRef.current = false;
+    globalCancellationFlagRef.current = false;
+    speechKillSwitchRef.current = false;
+    setIsWakeWordListening(false);
+    setIsListening(false);
+    setListeningAnimation(false);
+    
+    // DON'T close voice agent if we're awaiting confirmation
+    // This prevents the UI from disappearing when user wants to say "yes"
+    const isAwaitingConfirmation = awaitingConfirmation || awaitingConfirmationRef.current;
+    if (!isAwaitingConfirmation) {
+      setShowVoiceAgent(false);
+    } else {
+      console.log('🔄 Keeping voice agent open - awaiting confirmation');
+    }
+    
+    setVoiceText('');
+    
+    // Only clear agent response if it's not a meaningful response (like a summary or email content)
+    const currentResponse = agentResponse;
+    if (!currentResponse || 
+        currentResponse === 'Processing your request...' || 
+        currentResponse === 'Generating inbox summary...' || 
+        currentResponse === 'Looking for that email...' ||
+        currentResponse === 'Ready for your next command...') {
+      setAgentResponse('');
+    }
+    
+    // DON'T reset confirmation state - preserve awaitingConfirmation and pendingReply
+    // This allows "yes" commands to work after speech recognition errors
+    console.log('🔄 Preserving confirmation state - awaitingConfirmation:', awaitingConfirmation, 'ref:', awaitingConfirmationRef.current, 'pendingReply:', pendingReply ? 'exists' : 'none', 'pendingReplyRef:', pendingReplyRef.current ? 'exists' : 'none');
+    
+    setIsProcessingCommand(false);
+    setIsTtsSpeaking(false);
+  };
+
   const onSpeechError = (error: any) => {
     console.log('Speech recognition error:', error);
     setIsListening(false);
     setListeningAnimation(false);
     pulseAnim.stopAnimation();
     
-    // Don't show error messages for common "no speech detected" errors
-    if (error.error && error.error.code === '1110') {
-      console.log('No speech detected - this is normal, not showing error');
+    // Don't show error messages for common speech recognition errors
+    if (error.error && (
+      error.error.code === '1110' || 
+      error.error.message?.includes('already started') ||
+      error.error.message?.includes('Speech recognition already started') ||
+      error.error.message?.includes('No speech detected')
+    )) {
+      console.log('Speech recognition error (normal) - not showing to user:', error.error.message);
+      
+      // Reset flags for "already started" errors to allow recovery
+      if (error.error.message?.includes('already started') || error.error.message?.includes('Speech recognition already started')) {
+        console.log('🔄 Resetting flags due to "already started" error...');
+        resetVoiceAgentFlags();
+        
+        // Retry wake word detection after a delay
+        setTimeout(async () => {
+          console.log('🔄 Retrying wake word detection after error...');
+          try {
+            await startWakeWordDetection();
+          } catch (retryError) {
+            console.error('❌ Retry failed:', retryError);
+          }
+        }, 1000);
+      }
+      
       // Only set these if we're actively listening, not during wake word detection
       if (isListening && !isWakeWordListening) {
         setVoiceText('Listening...');
@@ -1394,8 +1566,15 @@ const HomeScreen = () => {
         speechKillSwitchRef.current = true;
         console.log('🛑 EMERGENCY STOP - Set speech kill switch to true');
         
-        // Clear any pending responses
-        setAgentResponse('');
+        // Clear any pending responses, but preserve meaningful responses like summaries
+        const currentResponse = agentResponse;
+        if (!currentResponse || 
+            currentResponse === 'Processing your request...' || 
+            currentResponse === 'Generating inbox summary...' || 
+            currentResponse === 'Looking for that email...' ||
+            currentResponse === 'Ready for your next command...') {
+          setAgentResponse('');
+        }
         setVoiceText('');
         
         // Stop any ongoing API calls by setting a flag that prevents new ones
@@ -1640,8 +1819,8 @@ const HomeScreen = () => {
       console.log('🛑 Stopping background listening before starting active listening...');
       await stopBackgroundListening();
       
-      // Small delay to ensure background listening is fully stopped
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Longer delay to ensure background listening is fully stopped and Voice module is ready
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       setIsListening(true);
       setListeningAnimation(true);
@@ -1679,12 +1858,33 @@ const HomeScreen = () => {
         // Make sure to stop any existing recognition first
         try {
           await Voice.stop();
+          console.log('Stopped existing recognition');
         } catch (e) {
           console.log('No existing recognition to stop');
         }
         
-              // Start voice recognition
-      await Voice.start('en-US');
+        // Small delay to ensure Voice module is ready
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Start voice recognition with retry logic
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        while (retryCount < maxRetries) {
+          try {
+            await Voice.start('en-US');
+            console.log('Voice recognition started successfully');
+            break;
+          } catch (error) {
+            retryCount++;
+            console.log(`Voice start attempt ${retryCount} failed:`, error);
+            if (retryCount < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 300));
+            } else {
+              throw error;
+            }
+          }
+        }
       
       // Reset wake word flag now that we're actively listening
       wakeWordJustDetectedRef.current = false;
@@ -1797,6 +1997,15 @@ const HomeScreen = () => {
     // Cleanup function to stop voice recognition when component unmounts
     return () => {
       console.log('Cleaning up Voice module...');
+      
+      // Reset all flags
+      wakeWordDetectionInProgressRef.current = false;
+      wakeWordJustDetectedRef.current = false;
+      justStartedListeningRef.current = false;
+      commandProcessedRef.current = false;
+      globalCancellationFlagRef.current = false;
+      speechKillSwitchRef.current = false;
+      
       if (Voice && typeof Voice.stop === 'function') {
         try {
           Voice.stop();
@@ -1851,13 +2060,8 @@ const HomeScreen = () => {
     try {
       console.log('🎧 Starting background listening...');
       
-      // Add extra safety check for physical devices
-      if (typeof Voice.start !== 'function') {
-        console.log('🎧 Voice.start is not a function, skipping background listening');
-        return;
-      }
-      
-      await Voice.start('en-US');
+      // Use the proper wake word detection function instead of direct Voice.start
+      await startWakeWordDetection();
       console.log('✅ Background listening started');
     } catch (error) {
       console.error('❌ Error starting background listening:', error);
@@ -1870,10 +2074,16 @@ const HomeScreen = () => {
     console.log('🛑 Stopping background listening...');
     
     try {
-      await Voice.stop();
-      console.log('✅ Background listening stopped');
+      // Only stop if we're actually in background listening mode
+      if (isWakeWordListening) {
+        await stopWakeWordDetection();
+        console.log('✅ Background listening stopped');
+      } else {
+        console.log('🛑 Background listening not active, skipping stop');
+      }
     } catch (error) {
       console.error('❌ Error stopping background listening:', error);
+      // Don't show this error to the user - it's expected sometimes
     }
   };
 
