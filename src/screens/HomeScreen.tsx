@@ -1424,6 +1424,7 @@ const HomeScreen = () => {
     const isAwaitingConfirmation = awaitingConfirmation || awaitingConfirmationRef.current;
     if (!isAwaitingConfirmation) {
       setShowVoiceAgent(false);
+      voiceAgentOpenRef.current = false; // Reset the ref when closing the UI
     } else {
       console.log('🔄 Keeping voice agent open - awaiting confirmation');
     }
