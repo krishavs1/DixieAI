@@ -38,5 +38,5 @@
     "dist",
     "**/*.test.ts"
   ],
-  "extends": "expo/tsconfig.base"
+  // Removed expo extension for backend
 }
