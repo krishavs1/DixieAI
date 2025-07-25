@@ -1466,8 +1466,10 @@ const HomeScreen = () => {
       
       // Reset flags for "already started" errors to allow recovery
       if (error.error.message?.includes('already started') || error.error.message?.includes('Speech recognition already started')) {
-        console.log('🔄 Resetting flags due to "already started" error...');
-        resetVoiceAgentFlags();
+        console.log('🔄 Ignoring normal "already started" error (keeping voice agent open)');
+        // Only reset the wake-word flag so detection can restart, but don't close the voice agent
+        wakeWordDetectionInProgressRef.current = false;
+        setIsWakeWordListening(false);
         
         // Retry wake word detection after a delay
         setTimeout(async () => {
@@ -1478,6 +1480,7 @@ const HomeScreen = () => {
             console.error('❌ Retry failed:', retryError);
           }
         }, 1000);
+        return;
       }
       
       // Only set these if we're actively listening, not during wake word detection
