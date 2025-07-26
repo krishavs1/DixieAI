@@ -54,4 +54,5 @@ expo-env.d.ts
 
 # Logs
 logs/
-*.log
+*.logios/Pods/
+backend/ios/Pods/
