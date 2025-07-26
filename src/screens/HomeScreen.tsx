@@ -9,24 +9,21 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  Alert,
   Animated,
   SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Speech from 'expo-speech';
-import { Audio } from 'expo-av';
+
 import * as Clipboard from 'expo-clipboard';
 import Voice from '@react-native-community/voice';
-import Tts from 'react-native-tts';
+
 
 import { useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { emailService, EmailThread, EmailLabel, EmailCategory, EmailCategoryInfo, EmailFilter, SYSTEM_LABELS } from '../services/emailService';
+import { emailService, EmailThread, EmailLabel, EmailCategory, EmailCategoryInfo, SYSTEM_LABELS } from '../services/emailService';
 import { showMessage } from 'react-native-flash-message';
 import dayjs from 'dayjs';
 
@@ -42,22 +39,18 @@ const HomeScreen = () => {
   const [currentCategory, setCurrentCategory] = useState<EmailCategory>('primary');
   const [labels, setLabels] = useState<EmailLabel[]>(SYSTEM_LABELS);
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
-  const [currentFilter, setCurrentFilter] = useState<EmailFilter>({});
-  const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
-  const [showLabelModal, setShowLabelModal] = useState(false);
+
   const [showSidePanel, setShowSidePanel] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [summaryText, setSummaryText] = useState('');
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speechRate, setSpeechRate] = useState(0.8);
-  const [selectedVoice, setSelectedVoice] = useState('en-GB'); // British English for more natural sound
-  const [availableVoices, setAvailableVoices] = useState<string[]>([]);
+
+
   // Add state for visual feedback
   const [isListening, setIsListening] = useState(false);
   const [voiceText, setVoiceText] = useState('');
   const [agentResponse, setAgentResponse] = useState('');
-  const [isAgentProcessing, setIsAgentProcessing] = useState(false);
+
   const [voiceInput, setVoiceInput] = useState('');
   const [showVoiceAgent, setShowVoiceAgent] = useState(false);
   const [listeningAnimation, setListeningAnimation] = useState(false);
@@ -92,7 +85,7 @@ const HomeScreen = () => {
   const wakeWordJustDetectedRef = useRef(false);
   const justStartedListeningRef = useRef(false);
   const commandProcessedRef = useRef(false);
-  const voiceAgentOpenRef = useRef(false);
+
   
   // Global cancellation flag - when true, all processing should stop immediately
   const globalCancellationFlagRef = useRef(false);
@@ -116,7 +109,7 @@ const HomeScreen = () => {
 
   // Cleanup speech when modal closes
   useEffect(() => {
-    if (!showSummaryModal && isSpeaking) {
+    if (!showSummaryModal && isTtsSpeaking) {
       stopSpeaking();
     }
   }, [showSummaryModal]);
@@ -124,15 +117,10 @@ const HomeScreen = () => {
   // Cleanup speech on unmount
   useEffect(() => {
     return () => {
-      if (isSpeaking) {
+      if (isTtsSpeaking) {
         stopSpeaking();
       }
     };
-  }, []);
-
-  // Initialize voices
-  useEffect(() => {
-    getAvailableVoices();
   }, []);
 
   // Start wake word detection when component mounts
@@ -144,17 +132,6 @@ const HomeScreen = () => {
     }, 2000);
     
     return () => clearTimeout(timer);
-  }, []);
-
-  // Welcome message for British voice
-  useEffect(() => {
-    setTimeout(() => {
-      showMessage({
-        message: '🇬🇧 British voice set as default - sophisticated and natural!',
-        type: 'success',
-        duration: 3000,
-      });
-    }, 1000);
   }, []);
 
   // Apply filters and categorization to threads
@@ -232,14 +209,6 @@ const HomeScreen = () => {
         emailService.fetchLabels(token)
       ]);
       
-      // Debug logging
-      console.log('Fetched threads:', fetchedThreads.map(t => ({
-        id: t.id,
-        subject: t.subject,
-        read: t.read,
-        labels: t.labels
-      })));
-      
       setOriginalThreads(fetchedThreads);
       setLabels(fetchedLabels);
       
@@ -312,11 +281,9 @@ const HomeScreen = () => {
     (navigation as any).navigate('EmailDetail', { threadId: thread.id, thread });
   };
 
-  const handleThreadLongPress = (thread: EmailThread) => {
-    setSelectedThread(thread);
-    setShowLabelModal(true);
-  };
 
+
+  // Code below to debug emails by copying HTML to clipboard and then seeing how it renders
   const handleDebugEmail = async (thread: EmailThread) => {
     if (!token) return;
     
@@ -343,38 +310,7 @@ const HomeScreen = () => {
     }
   };
 
-  const handleThreadLabelUpdate = async (threadId: string, labelId: string, add: boolean) => {
-    if (!token) return;
-    
-    try {
-      if (add) {
-        await emailService.addLabelToThread(token, threadId, labelId);
-      } else {
-        await emailService.removeLabelFromThread(token, threadId, labelId);
-      }
-      
-      // Update the thread in local state
-      setOriginalThreads(prev => prev.map(thread => {
-        if (thread.id === threadId) {
-          const updatedLabels = add 
-            ? [...(thread.labels || []), labelId]
-            : (thread.labels || []).filter(id => id !== labelId);
-          return { ...thread, labels: updatedLabels };
-        }
-        return thread;
-      }));
-      
-      showMessage({
-        message: add ? 'Label added' : 'Label removed',
-        type: 'success',
-      });
-    } catch (error) {
-      showMessage({
-        message: 'Failed to update label',
-        type: 'danger',
-      });
-    }
-  };
+
 
   const handleRefresh = () => {
     fetchThreads();
@@ -653,18 +589,7 @@ const HomeScreen = () => {
           
           // Process the command
           try {
-            // Debug: Log what we're checking for auto-reply
-            console.log('🔍 Auto-reply check:', {
-              hasWrite: lowerText.includes('write'),
-              hasReply: lowerText.includes('reply'),
-              hasThat: lowerText.includes('that'),
-              hasThis: lowerText.includes('this'),
-              fullText: lowerText
-            });
-            
-            // 0. CONFIRMATION COMMAND - if we're awaiting confirmation
-            console.log('🔍 Confirmation check - awaitingConfirmation:', awaitingConfirmation, 'ref:', awaitingConfirmationRef.current, 'text:', lowerText, 'pendingReply:', pendingReply ? 'exists' : 'none', 'pendingReplyRef:', pendingReplyRef.current ? 'exists' : 'none');
-            
+           
             // Check both state and ref for confirmation
             const isAwaitingConfirmation = awaitingConfirmation || awaitingConfirmationRef.current;
             const hasPendingReply = pendingReply || pendingReplyRef.current;
@@ -805,14 +730,7 @@ const HomeScreen = () => {
         .replace(/ and /g, ' ... and ') // Add pause before "and"
         .replace(/\.$/, '...'); // Add pause at the end
       
-      // Ensure wake word detection is active during TTS
-      // Add a small delay to prevent Dixie from picking up its own voice
-      if (!isWakeWordListening) {
-        console.log('🎧 Starting wake word detection during TTS...');
-        setTimeout(() => {
-          startWakeWordDetection();
-        }, 1000); // 1 second delay to avoid self-triggering
-      }
+     
       
       // Wait a moment before speaking
       setTimeout(async () => {
@@ -832,22 +750,10 @@ const HomeScreen = () => {
               console.log('🎤 SPEECH COMPLETED SUCCESSFULLY');
               console.log('🎤 Current state - showVoiceAgent:', showVoiceAgent, 'isVoiceAgentClosed:', isVoiceAgentClosed);
               setIsTtsSpeaking(false);
-              
-              // Always start wake word detection after speech completes, regardless of voice agent state
-              console.log('🎧 Speech completed, starting wake word detection...');
-              setTimeout(() => {
-                startWakeWordDetection();
-              }, 500);
             },
             onError: (error: any) => {
               console.error('Speech error:', error);
               setIsTtsSpeaking(false);
-              
-              // Always start wake word detection after speech error
-              console.log('🎧 Speech error, starting wake word detection...');
-              setTimeout(() => {
-                startWakeWordDetection();
-              }, 500);
             },
             onStart: () => {
               console.log('🎤 SPEECH STARTED SUCCESSFULLY');
@@ -1229,7 +1135,7 @@ const HomeScreen = () => {
     setVoiceText('');
     setAgentResponse('');
     setVoiceInput('');
-    setIsAgentProcessing(false);
+    
     setIsTtsSpeaking(false);
     
     // Stop any animations
@@ -1251,7 +1157,7 @@ const HomeScreen = () => {
     commandProcessedRef.current = false;
     
     // Reset voice agent open flag
-    voiceAgentOpenRef.current = false;
+    
     
     // Restart background listening after closing voice agent
     setTimeout(() => {
@@ -1424,7 +1330,7 @@ const HomeScreen = () => {
     const isAwaitingConfirmation = awaitingConfirmation || awaitingConfirmationRef.current;
     if (!isAwaitingConfirmation) {
       setShowVoiceAgent(false);
-      voiceAgentOpenRef.current = false; // Reset the ref when closing the UI
+ // Reset the ref when closing the UI
     } else {
       console.log('🔄 Keeping voice agent open - awaiting confirmation');
     }
@@ -1510,7 +1416,6 @@ const HomeScreen = () => {
 
   const onSpeechResults = (event: any) => {
     try {
-      console.log('Speech results received:', event);
       console.log('🔍 Speech results - isWakeWordListening:', isWakeWordListening);
       console.log('🔍 Speech results - showVoiceAgent:', showVoiceAgent);
     
@@ -1525,7 +1430,6 @@ const HomeScreen = () => {
     // This allows interruption during TTS and processing
     const results = event.value || [];
     const text = results[0]?.toLowerCase() || '';
-    console.log('🔍 Checking for wake word:', text);
     
     // ALWAYS process wake words, even during command processing
     // This allows interruption with "Dixie" at any time
@@ -1586,10 +1490,9 @@ const HomeScreen = () => {
       }
       
       // Handle wake word detection - either open voice agent or restart listening
-      if (!showVoiceAgent && !voiceAgentOpenRef.current) {
+      if (!showVoiceAgent) {
         // Voice agent is closed - open it and start listening
         console.log('🎯 Wake word detected - opening voice agent and starting listening...');
-        voiceAgentOpenRef.current = true; // Set flag to prevent multiple openings
         
         // Stop background listening first
         stopBackgroundListening();
@@ -1601,7 +1504,7 @@ const HomeScreen = () => {
         // Open voice agent immediately and set all flags
         console.log('🎯 Setting showVoiceAgent to true...');
         setShowVoiceAgent(true);
-        voiceAgentOpenRef.current = true;
+
         setAgentResponse('Voice agent ready! Starting listening...');
         setIsVoiceAgentClosed(false);
         setSpeechKillSwitch(false);
@@ -1610,7 +1513,7 @@ const HomeScreen = () => {
         // Debug: Log the state after setting
         setTimeout(() => {
           console.log('🎯 Debug - showVoiceAgent state after setting:', showVoiceAgent);
-          console.log('🎯 Debug - voiceAgentOpenRef.current:', voiceAgentOpenRef.current);
+  
         }, 100);
       } else {
         // Voice agent is already open - just restart listening
@@ -2135,168 +2038,30 @@ const HomeScreen = () => {
     }
   };
 
-  // Speak the summary using text-to-speech
+  // Speak the summary using text-to-speech (now consolidated with speakResponse)
   const speakSummary = (text: string) => {
-    console.log('Speech function called with text:', text.substring(0, 50) + '...');
-    console.log('Current speech state:', { isSpeaking, speechRate, selectedVoice });
+    console.log('🎤 SPEAK SUMMARY CALLED - Text:', text.substring(0, 50) + '...');
     
-    if (isSpeaking) {
-      console.log('Stopping current speech...');
+    if (isTtsSpeaking) {
+      console.log('🛑 Stopping current speech...');
       Speech.stop();
-      setIsSpeaking(false);
+      setIsTtsSpeaking(false);
       return;
     }
 
-    setIsSpeaking(true);
-    console.log('Starting speech with rate:', speechRate, 'voice:', selectedVoice);
-    
-    // Add natural speech patterns
-    const conversationalText = text
-      .replace(/\. /g, '... ')
-      .replace(/, /g, ', ... ')
-      .replace(/ and /g, ' ... and ')
-      .replace(/\.$/, '...');
-    
-    Speech.speak(conversationalText, {
-      language: selectedVoice,
-      pitch: 1.0, // Natural pitch for conversational sound
-      rate: 0.75, // Slightly slower for more natural pace
-      onDone: () => {
-        console.log('Speech completed successfully');
-        setIsSpeaking(false);
-      },
-      onError: (error: any) => {
-        console.error('Speech error:', error);
-        setIsSpeaking(false);
-        showMessage({
-          message: 'Sorry, I had trouble speaking. Please try again.',
-          type: 'danger',
-        });
-      },
-      onStart: () => {
-        console.log('Speech started successfully');
-      },
-      onStopped: () => {
-        console.log('Speech was stopped');
-        setIsSpeaking(false);
-      },
-    });
+    // Use the consolidated speakResponse function
+    speakResponse(text);
   };
 
-  // Test basic audio (not speech)
-  const testBasicAudio = async () => {
-    try {
-      console.log('Testing basic audio...');
-      
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav' },
-        { shouldPlay: true }
-      );
-      
-      await sound.playAsync();
-      
-      showMessage({
-        message: 'Playing test sound - do you hear it?',
-        type: 'info',
-      });
-      
-      // Clean up after 3 seconds
-      setTimeout(async () => {
-        await sound.unloadAsync();
-      }, 3000);
-      
-    } catch (error) {
-      console.error('Audio test error:', error);
-      showMessage({
-        message: 'Audio test failed - try on a physical device',
-        type: 'danger',
-      });
-    }
-  };
 
-  // Show speech troubleshooting tips
-  const showSpeechTips = () => {
-    Alert.alert(
-      'Speech Not Working?',
-      'Try these steps:\n\n1. Turn up your device volume\n2. Make sure you\'re not on silent mode\n3. Try on a physical device (not simulator)\n4. Check if other apps can play audio\n5. Restart the app if needed',
-      [
-        { text: 'OK', style: 'default' },
-        { text: 'Test Speech', onPress: testSpeech },
-      ]
-    );
-  };
-
-  // Test speech with a simple phrase
-  const testSpeech = () => {
-    console.log('Testing speech...');
-    
-    // Try different speech configurations
-    const testConfigs = [
-      { language: selectedVoice, pitch: 1.0, rate: 0.75 },
-      { language: selectedVoice, pitch: 0.95, rate: 0.8 },
-      { language: selectedVoice, pitch: 1.05, rate: 0.7 },
-    ];
-    
-    let configIndex = 0;
-    
-    const tryNextConfig = () => {
-      if (configIndex >= testConfigs.length) {
-        showMessage({
-          message: 'Speech test failed. Check device volume and try again.',
-          type: 'danger',
-        });
-        return;
-      }
-      
-      const config = testConfigs[configIndex];
-      console.log(`Trying speech config ${configIndex + 1}:`, config);
-      
-      Speech.speak(`Test ${configIndex + 1}: Hello, this is Dixie speaking with a more natural voice!`, {
-        ...config,
-        onDone: () => {
-          console.log(`Test ${configIndex + 1} completed`);
-          showMessage({
-            message: `Speech test ${configIndex + 1} completed - did you hear it?`,
-            type: 'success',
-          });
-        },
-        onError: (error: any) => {
-          console.error(`Test ${configIndex + 1} error:`, error);
-          configIndex++;
-          setTimeout(tryNextConfig, 500);
-        },
-        onStart: () => {
-          console.log(`Test ${configIndex + 1} started`);
-          showMessage({
-            message: `Speech test ${configIndex + 1} started - check your volume!`,
-            type: 'info',
-          });
-        },
-      });
-    };
-    
-    tryNextConfig();
-  };
 
   // Stop speaking
   const stopSpeaking = () => {
     Speech.stop();
-    setIsSpeaking(false);
+    setIsTtsSpeaking(false);
   };
 
-  // Adjust speech rate
-  const adjustSpeechRate = () => {
-    const rates = [0.6, 0.8, 1.0, 1.2, 1.4];
-    const currentIndex = rates.indexOf(speechRate);
-    const nextIndex = (currentIndex + 1) % rates.length;
-    setSpeechRate(rates[nextIndex]);
-    
-    showMessage({
-      message: `Speech speed: ${rates[nextIndex]}x`,
-      type: 'info',
-      duration: 1500,
-    });
-  };
+
 
   const classifyEmailsForReply = async () => {
     if (!token || originalThreads.length === 0) return;
@@ -2391,7 +2156,7 @@ const HomeScreen = () => {
           item.read === false && styles.unreadThread
         ]}
       onPress={() => handleThreadPress(item)}
-        onLongPress={() => handleThreadLongPress(item)}
+        
     >
       <View style={styles.threadHeader}>
           <View style={styles.threadFromContainer}>
@@ -2470,126 +2235,11 @@ const HomeScreen = () => {
     </View>
   );
 
-  // Get available voices for better speech
-  const getAvailableVoices = async () => {
-    try {
-      // Expanded voice options with more variety
-      const voices = [
-        'en-GB', // British English (often sounds more natural)
-        'en-US', // Default US English
-        'en-AU', // Australian English
-        'en-CA', // Canadian English
-        'en-IN', // Indian English (clear pronunciation)
-        'en-IE', // Irish English (friendly accent)
-        'en-ZA', // South African English
-        'en-NZ', // New Zealand English
-        'en-PH', // Philippine English
-        'en-SG', // Singapore English
-      ];
-      
-      setAvailableVoices(voices);
-      console.log('Available voices:', voices);
-    } catch (error) {
-      console.error('Error getting voices:', error);
-    }
-  };
 
-  // Preview all voices quickly
-  const previewAllVoices = () => {
-    let voiceIndex = 0;
-    
-    const previewNextVoice = () => {
-      if (voiceIndex >= availableVoices.length) {
-        showMessage({
-          message: 'Voice preview complete! Tap the person button to select your favorite.',
-          type: 'success',
-        });
-        return;
-      }
-      
-      const voice = availableVoices[voiceIndex];
-      const voiceNames = {
-        'en-US': 'American',
-        'en-GB': 'British',
-        'en-AU': 'Australian',
-        'en-CA': 'Canadian',
-        'en-IN': 'Indian',
-        'en-IE': 'Irish',
-        'en-ZA': 'South African',
-        'en-NZ': 'New Zealand',
-        'en-PH': 'Philippine',
-        'en-SG': 'Singapore',
-      };
-      
-      const voiceName = voiceNames[voice as keyof typeof voiceNames] || voice;
-      
-      Speech.speak(`This is the ${voiceName} accent.`, {
-        language: voice,
-        pitch: 1.1,
-        rate: 0.8,
-        onDone: () => {
-          voiceIndex++;
-          setTimeout(previewNextVoice, 500);
-        },
-      });
-    };
-    
-    showMessage({
-      message: 'Starting voice preview...',
-      type: 'info',
-    });
-    
-    previewNextVoice();
-  };
 
-  // Change voice
-  const changeVoice = () => {
-    const voices = availableVoices;
-    const currentIndex = voices.indexOf(selectedVoice);
-    const nextIndex = (currentIndex + 1) % voices.length;
-    const newVoice = voices[nextIndex];
-    
-    setSelectedVoice(newVoice);
-    
-    // Fun descriptions for each voice
-    const voiceDescriptions = {
-      'en-US': '🇺🇸 American - Classic and clear',
-      'en-GB': '🇬🇧 British - Sophisticated and natural',
-      'en-AU': '🇦🇺 Australian - Friendly and laid-back',
-      'en-CA': '🇨🇦 Canadian - Polite and clear',
-      'en-IN': '🇮🇳 Indian - Warm and articulate',
-      'en-IE': '🇮🇪 Irish - Charming and melodic',
-      'en-ZA': '🇿🇦 South African - Unique and engaging',
-      'en-NZ': '🇳🇿 New Zealand - Kiwi charm',
-      'en-PH': '🇵🇭 Philippine - Clear and friendly',
-      'en-SG': '🇸🇬 Singapore - International and precise',
-    };
-    
-    const description = voiceDescriptions[newVoice as keyof typeof voiceDescriptions] || newVoice;
-    
-    showMessage({
-      message: `Voice: ${description}`,
-      type: 'info',
-      duration: 2000,
-    });
-    
-    // Test the new voice with a fun message
-    const testMessages = [
-      'Hello there! This is Dixie with a new accent!',
-      'G\'day! How\'s your inbox looking today?',
-      'Top of the morning! Ready to tackle those emails?',
-      'Cheers! Let\'s get your inbox sorted!',
-      'Brilliant! I\'m here to help with your emails!',
-    ];
-    
-    const randomMessage = testMessages[Math.floor(Math.random() * testMessages.length)];
-    
-    Speech.speak(randomMessage, {
-      language: newVoice,
-      pitch: 1.1,
-      rate: 0.8,
-    });
-  };
+
+
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -2701,23 +2351,6 @@ const HomeScreen = () => {
                 <Text style={styles.voiceAgentTitle}>Dixie Voice Agent</Text>
               </View>
               <View style={styles.voiceAgentHeaderRight}>
-                <TouchableOpacity 
-                  onPress={changeVoice}
-                  style={styles.voiceButton}
-                >
-                  <Text style={styles.voiceText}>
-                    {selectedVoice === 'en-GB' ? '🇬🇧 British' : 
-                     selectedVoice === 'en-US' ? '🇺🇸 American' :
-                     selectedVoice === 'en-AU' ? '🇦🇺 Australian' :
-                     selectedVoice === 'en-CA' ? '🇨🇦 Canadian' :
-                     selectedVoice === 'en-IN' ? '🇮🇳 Indian' :
-                     selectedVoice === 'en-IE' ? '🇮🇪 Irish' :
-                     selectedVoice === 'en-ZA' ? '🇿🇦 South African' :
-                     selectedVoice === 'en-NZ' ? '🇳🇿 New Zealand' :
-                     selectedVoice === 'en-PH' ? '🇵🇭 Philippine' :
-                     selectedVoice === 'en-SG' ? '🇸🇬 Singapore' : selectedVoice}
-                  </Text>
-                </TouchableOpacity>
                 <TouchableOpacity 
                   onPress={closeVoiceAgent}
                   style={styles.voiceAgentCloseButton}
@@ -2837,7 +2470,7 @@ const HomeScreen = () => {
               <TouchableOpacity 
                 onPress={handleVoiceInputSubmit}
                 style={styles.voiceAgentSendButton}
-                disabled={isAgentProcessing}
+                disabled={isProcessingCommand}
               >
                 <Ionicons name="send" size={20} color="#fff" />
               </TouchableOpacity>
@@ -2846,54 +2479,7 @@ const HomeScreen = () => {
         </View>
       </Modal>
 
-      {/* Label Management Modal */}
-      <Modal
-        visible={showLabelModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowLabelModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Manage Labels</Text>
-              <TouchableOpacity onPress={() => setShowLabelModal(false)}>
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-            
-            {selectedThread && (
-              <View style={styles.modalBody}>
-                <Text style={styles.modalSubject} numberOfLines={2}>
-                  {selectedThread.subject}
-                </Text>
-                <Text style={styles.modalFrom}>From: {selectedThread.from}</Text>
-                
-                <ScrollView style={styles.labelsList}>
-                  {labels.map((label) => {
-                    const isSelected = selectedThread.labels?.includes(label.id) || false;
-                    return (
-                      <TouchableOpacity
-                        key={label.id}
-                        style={[styles.labelOption, isSelected && styles.selectedLabelOption]}
-                        onPress={() => handleThreadLabelUpdate(selectedThread.id, label.id, !isSelected)}
-                      >
-                        <View style={styles.labelOptionContent}>
-                          <View style={[styles.labelColor, { backgroundColor: label.color }]} />
-                          <Text style={[styles.labelOptionText, isSelected && styles.selectedLabelOptionText]}>
-                            {label.name}
-                          </Text>
-                        </View>
-                        {isSelected && <Ionicons name="checkmark" size={20} color="#4285F4" />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            )}
-          </View>
-        </View>
-      </Modal>
+
 
       {/* Inbox Summary Modal */}
       <Modal
@@ -2916,9 +2502,9 @@ const HomeScreen = () => {
                     style={styles.speechButton}
                   >
                     <Ionicons 
-                      name={isSpeaking ? "pause" : "volume-high"} 
+                      name={isTtsSpeaking ? "pause" : "volume-high"} 
                       size={20} 
-                      color={isSpeaking ? "#FF6D01" : "#4285F4"} 
+                      color={isTtsSpeaking ? "#FF6D01" : "#4285F4"} 
                     />
                   </TouchableOpacity>
                 )}
@@ -2939,7 +2525,7 @@ const HomeScreen = () => {
                 </View>
               ) : (
                 <ScrollView style={styles.summaryContent}>
-                  {isSpeaking && (
+                  {isTtsSpeaking && (
                     <View style={styles.speakingIndicator}>
                       <Ionicons name="volume-high" size={16} color="#4285F4" />
                       <Text style={styles.speakingText}>Dixie is speaking...</Text>
@@ -3406,48 +2992,8 @@ const styles = StyleSheet.create({
   modalBody: {
     padding: 20,
   },
-  modalSubject: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 8,
-  },
-  modalFrom: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 20,
-  },
-  labelsList: {
-    maxHeight: 300,
-  },
-  labelOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    backgroundColor: '#f8f9fa',
-  },
-  selectedLabelOption: {
-    backgroundColor: '#e8f0fe',
-    borderWidth: 1,
-    borderColor: '#4285F4',
-  },
-  labelOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  labelOptionText: {
-    fontSize: 14,
-    color: '#3c4043',
-    marginLeft: 8,
-  },
-  selectedLabelOptionText: {
-    color: '#1a73e8',
-    fontWeight: '500',
-  },
+
+
   // Header styles
   menuButton: {
     padding: 8,
