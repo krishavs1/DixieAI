@@ -1238,4 +1238,77 @@ router.post('/send-reply', authMiddleware, async (req: AuthRequest, res: express
   }
 });
 
+// Edit existing reply with user feedback
+router.post('/edit-reply', authMiddleware, async (req: AuthRequest, res: express.Response) => {
+  try {
+    const { threadId, currentReply, editFeedback } = req.body;
+
+    if (!threadId || !currentReply || !editFeedback) {
+      return res.status(400).json({ error: 'Thread ID, current reply, and edit feedback are required' });
+    }
+
+    const tryWithRefresh = async () => {
+      const { gmail } = createGmailClient(req.user.accessToken, req.user.refreshToken);
+      
+      // Get the thread to understand context
+      const threadResponse = await gmail.users.threads.get({
+        userId: 'me',
+        id: threadId,
+      });
+
+      const thread = threadResponse.data;
+      if (!thread.messages || thread.messages.length === 0) {
+        throw new Error('Thread has no messages');
+      }
+
+      // Get the latest message (the one to reply to)
+      const latestMessage = thread.messages[thread.messages.length - 1];
+      const payload = latestMessage.payload;
+      
+      // Extract email content
+      const fromHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'from');
+      const subjectHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'subject');
+      const senderName = fromHeader?.value?.replace(/<.*>/g, '').trim() || 'Unknown';
+      const originalSubject = subjectHeader?.value || 'No Subject';
+
+      // Extract email body
+      const emailBody = extractEmailBody(payload!);
+
+      // Generate edited reply using AI
+      const editedReply = await AIService.generateEditedReply({
+        originalEmail: {
+          from: senderName,
+          subject: originalSubject,
+          body: emailBody,
+        },
+        currentReply: currentReply,
+        editFeedback: editFeedback,
+        userName: req.user.name || 'User',
+      });
+
+      logger.info(`Generated edited reply for thread ${threadId} with feedback: ${editFeedback}`);
+      return res.json({ 
+        reply: editedReply,
+        threadId: threadId,
+        originalSubject: originalSubject,
+        replyTo: senderName,
+      });
+    };
+
+    try {
+      return await tryWithRefresh();
+    } catch (error: any) {
+      if (error.code === 401) {
+        logger.info('Access token expired, attempting refresh...');
+        return await tryWithRefresh();
+      }
+      throw error;
+    }
+
+  } catch (error) {
+    logger.error('Error editing reply:', error);
+    return res.status(500).json({ error: 'Failed to edit reply' });
+  }
+});
+
 export default router; 

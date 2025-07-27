@@ -348,6 +348,79 @@ Write a professional reply following the user's instruction:`;
   }
 
   /**
+   * Generate an edited reply based on the current reply and user feedback
+   */
+  static async generateEditedReply(options: {
+    originalEmail: {
+      from: string;
+      subject: string;
+      body: string;
+    };
+    currentReply: string;
+    editFeedback: string;
+    userName: string;
+  }): Promise<string> {
+    try {
+      const { originalEmail, currentReply, editFeedback, userName } = options;
+      
+      // Clean the original email body
+      const cleanBody = this.cleanEmailContent(originalEmail.body);
+      
+      // Extract sender name from email address/format
+      const senderName = originalEmail.from.includes('<') 
+        ? originalEmail.from.split('<')[0].trim() 
+        : originalEmail.from.split('@')[0];
+      
+      const systemPrompt = `You are Dixie, an AI email assistant helping ${userName} edit their email replies.
+
+Your job is to:
+1. Take the current reply and modify it based on the user's feedback
+2. Keep the same professional tone and structure
+3. Apply the requested changes while maintaining the reply's coherence
+4. Don't completely rewrite the reply - just make the specific changes requested
+
+Rules:
+• Maintain the same greeting and sign-off
+• Apply the user's feedback exactly as requested
+• Keep the same overall structure and flow
+• Don't add new content unless specifically requested
+• Preserve the professional tone
+• Make minimal changes to achieve the requested edit`;
+
+      const userPrompt = `Original email from ${originalEmail.from}:
+Subject: ${originalEmail.subject}
+
+${cleanBody}
+
+Current reply:
+${currentReply}
+
+User's edit feedback: ${editFeedback}
+
+Please modify the current reply according to the user's feedback:`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 400,
+      });
+
+      const editedReply = response.choices[0]?.message?.content?.trim() || 'Sorry, I couldn\'t edit the reply. Please try again.';
+      
+      logger.info(`Generated edited reply for email from ${originalEmail.from}: ${editedReply.substring(0, 100)}...`);
+      return editedReply;
+    } catch (error) {
+      logger.error('Error generating edited reply:', error);
+      logger.error('Error details:', JSON.stringify(error, null, 2));
+      return 'Sorry, I had trouble editing the reply. Please try again.';
+    }
+  }
+
+  /**
    * Clean email content for better classification
    */
   private static cleanEmailContent(content: string): string {

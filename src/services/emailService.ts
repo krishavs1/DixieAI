@@ -824,5 +824,40 @@ export const emailService = {
     }
   },
 
+  // Edit an existing reply with user feedback
+  editReply: async (threadId: string, currentReply: string, editFeedback: string, token: string) => {
+    try {
+      const baseURL = await API_CONFIG.BASE_URL;
+      const url = `${baseURL}/api/email/edit-reply`;
+      
+      console.log(`✏️ Editing reply for thread: ${threadId} with feedback: ${editFeedback}`);
+      
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          threadId, 
+          currentReply,
+          editFeedback
+        }),
+      }, API_CONFIG.TIMEOUT);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Reply edited successfully`);
+      return data.reply;
+    } catch (error) {
+      console.error('Error editing reply:', error);
+      throw error;
+    }
+  },
+
 
 }; 

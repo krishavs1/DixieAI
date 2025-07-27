@@ -72,6 +72,11 @@ const HomeScreen = () => {
   const [pendingReply, setPendingReply] = useState<string>('');
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   
+  // State for edit mode flow
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editHistory, setEditHistory] = useState<string[]>([]);
+  const [originalReply, setOriginalReply] = useState<string>('');
+  
   // Refs to persist thread context across voice agent sessions
   const currentThreadRef = useRef<any>(null);
   const currentSenderRef = useRef<string>('');
@@ -98,6 +103,11 @@ const HomeScreen = () => {
   
   // Ref to track pending reply more reliably (prevents state loss during re-renders)
   const pendingReplyRef = useRef('');
+  
+  // Refs for edit mode state (prevents state loss during re-renders)
+  const isEditModeRef = useRef(false);
+  const editHistoryRef = useRef<string[]>([]);
+  const originalReplyRef = useRef('');
   
   // Timer that lasts 10 seconds after speech completes to detect further speech
   const followUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -623,6 +633,14 @@ const HomeScreen = () => {
               return;
             }
             
+            // EDIT MODE HANDLING - Check if we're in edit mode and handle edit requests
+            const isInEditMode = isEditMode || isEditModeRef.current;
+            if (isInEditMode && isAwaitingConfirmation) {
+              console.log('✏️ DETECTED EDIT MODE - Processing edit request...');
+              await handleEditRequest(text);
+              return;
+            }
+            
             // 1. SUMMARIZE COMMAND
             if (lowerText.includes('summarize') || lowerText.includes('summary')) {
               console.log('✅ DETECTED SUMMARIZE COMMAND - Processing...');
@@ -983,16 +1001,20 @@ const HomeScreen = () => {
       // Generate a contextual reply using AI
       const replyDraft = await emailService.generateContextualReply(threadToUse.id, token);
       
-      // Store the pending reply
+      // Store the pending reply and set up edit mode
       setPendingReply(replyDraft);
       pendingReplyRef.current = replyDraft; // Also set the ref for reliability
+      setOriginalReply(replyDraft);
+      originalReplyRef.current = replyDraft;
       setAwaitingConfirmation(true);
       awaitingConfirmationRef.current = true; // Also set the ref for reliability
+      setIsEditMode(true);
+      isEditModeRef.current = true;
       
-      // Ask for confirmation
-      const confirmationMessage = `Your reply says: ${replyDraft}. Can I send it?`;
-      setAgentResponse(confirmationMessage);
-      await speakResponse(confirmationMessage);
+      // Ask for edits instead of confirmation
+      const editMessage = `Here's your reply: ${replyDraft}. Do you have any edits?`;
+      setAgentResponse(editMessage);
+      await speakResponse(editMessage);
       
       console.log('✅ Auto-reply draft generated, awaiting confirmation');
     } catch (error) {
@@ -1031,6 +1053,14 @@ const HomeScreen = () => {
       setAwaitingConfirmation(false);
       awaitingConfirmationRef.current = false; // Also reset the ref
       
+      // Reset edit mode state
+      setIsEditMode(false);
+      isEditModeRef.current = false;
+      setEditHistory([]);
+      editHistoryRef.current = [];
+      setOriginalReply('');
+      originalReplyRef.current = '';
+      
       const successMsg = "Reply sent successfully!";
       setAgentResponse(successMsg);
       await speakResponse(successMsg);
@@ -1048,12 +1078,89 @@ const HomeScreen = () => {
     }
   };
 
+  // Handle edit requests and send commands
+  const handleEditRequest = async (text: string) => {
+    console.log('✏️ HANDLING EDIT REQUEST - Text:', text);
+    
+    const lowerText = text.toLowerCase();
+    
+    // Check if user wants to send the email
+    if (lowerText.includes('send it') || lowerText.includes('send') || lowerText.includes('yes') || lowerText.includes('go ahead')) {
+      console.log('✅ DETECTED SEND COMMAND - Sending email...');
+      await handleSendConfirmedReply();
+      return;
+    }
+    
+    // Check if user wants to cancel
+    if (lowerText.includes('cancel') || lowerText.includes('no') || lowerText.includes('stop')) {
+      console.log('❌ DETECTED CANCEL COMMAND - Cancelling reply...');
+      await handleCancelReply();
+      return;
+    }
+    
+    // User provided edit feedback - regenerate the reply
+    console.log('✏️ DETECTED EDIT FEEDBACK - Regenerating reply...');
+    
+    try {
+      setAgentResponse('Generating updated reply...');
+      
+      // Get the current reply to edit
+      const currentReply = pendingReply || pendingReplyRef.current;
+      if (!currentReply) {
+        throw new Error('No reply content available for editing');
+      }
+      
+      // Add this edit to history
+      const newEditHistory = [...editHistory, text];
+      setEditHistory(newEditHistory);
+      editHistoryRef.current = newEditHistory;
+      
+      // Generate updated reply with edit feedback
+      const threadToUse = currentThread || currentThreadRef.current;
+      if (!threadToUse) {
+        throw new Error('No thread context available');
+      }
+      
+      // Use the new edit-aware API
+      const updatedReply = await emailService.editReply(
+        threadToUse.id, 
+        currentReply,
+        text,
+        token
+      );
+      
+      // Update the pending reply
+      setPendingReply(updatedReply);
+      pendingReplyRef.current = updatedReply;
+      
+      // Ask for more edits
+      const editMessage = `Here's your updated reply: ${updatedReply}. Do you have any edits?`;
+      setAgentResponse(editMessage);
+      await speakResponse(editMessage);
+      
+      console.log('✅ Reply updated with edit feedback');
+    } catch (error) {
+      console.error('❌ Error handling edit request:', error);
+      const errorMsg = "Sorry, I had trouble updating that reply. Please try again.";
+      setAgentResponse(errorMsg);
+      await speakResponse(errorMsg);
+    }
+  };
+
   // Handle cancelled reply
   const handleCancelReply = async () => {
     setPendingReply('');
     pendingReplyRef.current = ''; // Also reset the ref
     setAwaitingConfirmation(false);
     awaitingConfirmationRef.current = false; // Also reset the ref
+    
+    // Reset edit mode state
+    setIsEditMode(false);
+    isEditModeRef.current = false;
+    setEditHistory([]);
+    editHistoryRef.current = [];
+    setOriginalReply('');
+    originalReplyRef.current = '';
     
     const cancelMsg = "Okay, I've cancelled the reply.";
     setAgentResponse(cancelMsg);
