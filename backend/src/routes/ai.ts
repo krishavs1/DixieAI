@@ -135,13 +135,26 @@ Your task is to generate a natural, human-like reply that:
 6. Matches the context and urgency of the original message
 7. ONLY generates the email body content - DO NOT include subject lines, headers, or metadata
 
-IMPORTANT: Generate ONLY the email body content. Do not include:
+IMPORTANT: Generate ONLY the email body content with proper formatting:
+- Start with a greeting (e.g., "Hi [Name],")
+- Add TWO line breaks after the greeting
+- Write the main content
+- Add TWO line breaks before the signature
+- End with a signature (e.g., "Best regards,\nKrishav")
+
+Do not include:
 - Subject lines (like "Re: Follow up ⏰")
 - "From:" or "To:" headers
 - Date/time information
 - Any other email metadata
 
-Start directly with the greeting and end with the signature.`;
+Example format:
+Hi [Name],
+
+[Main content here]
+
+Best regards,
+Krishav`;
 
     const userPrompt = `Please generate ONLY the email body content for this reply:
 
@@ -208,33 +221,36 @@ function generateContextualReply(context: any): string {
   const { originalMessage, sender, subject } = context;
   const content = originalMessage.toLowerCase();
   
+  // Extract sender name for greeting
+  const senderName = sender.split('<')[0].trim();
+  
   // Analyze the content and generate appropriate replies
   if (content.includes('thank you') || content.includes('thanks')) {
-    return "You're welcome! I'm glad I could help. Let me know if you need anything else.";
+    return `Hi ${senderName},\n\nYou're welcome! I'm glad I could help. Let me know if you need anything else.\n\nBest regards,\nKrishav`;
   }
   
   if (content.includes('meeting') || content.includes('schedule') || content.includes('appointment')) {
-    return "Thank you for reaching out about the meeting. I'll review the details and confirm my availability. I'll get back to you shortly with my response.";
+    return `Hi ${senderName},\n\nThank you for reaching out about the meeting. I'll review the details and confirm my availability. I'll get back to you shortly with my response.\n\nBest regards,\nKrishav`;
   }
   
   if (content.includes('project') || content.includes('deadline') || content.includes('timeline')) {
-    return "Thanks for the project update. I've reviewed the information and will follow up with any questions or next steps. I appreciate you keeping me in the loop.";
+    return `Hi ${senderName},\n\nThanks for the project update. I've reviewed the information and will follow up with any questions or next steps. I appreciate you keeping me in the loop.\n\nBest regards,\nKrishav`;
   }
   
   if (content.includes('question') || content.includes('help') || content.includes('assistance')) {
-    return "Thank you for your question. I'll look into this and provide a detailed response soon. I want to make sure I give you the most accurate and helpful information.";
+    return `Hi ${senderName},\n\nThank you for your question. I'll look into this and provide a detailed response soon. I want to make sure I give you the most accurate and helpful information.\n\nBest regards,\nKrishav`;
   }
   
   if (content.includes('urgent') || content.includes('asap') || content.includes('important')) {
-    return "I understand this is urgent. I'll prioritize this and get back to you as soon as possible. Thank you for bringing this to my attention.";
+    return `Hi ${senderName},\n\nI understand this is urgent. I'll prioritize this and get back to you as soon as possible. Thank you for bringing this to my attention.\n\nBest regards,\nKrishav`;
   }
   
   if (content.includes('good') || content.includes('great') || content.includes('excellent')) {
-    return "That's great to hear! I'm glad everything is working out well. Keep me updated on any further developments.";
+    return `Hi ${senderName},\n\nThat's great to hear! I'm glad everything is working out well. Keep me updated on any further developments.\n\nBest regards,\nKrishav`;
   }
   
   // Default professional reply
-  return "Thank you for your email. I've received your message and will review it carefully. I'll respond with a detailed reply shortly. I appreciate you reaching out.";
-  }
+  return `Hi ${senderName},\n\nThank you for your email. I've received your message and will review it carefully. I'll respond with a detailed reply shortly. I appreciate you reaching out.\n\nBest regards,\nKrishav`;
+}
 
 export default router; 
