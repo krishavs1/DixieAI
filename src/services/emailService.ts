@@ -540,12 +540,16 @@ export const emailService = {
       // Check cancellation every 100ms
       cancellationInterval = setInterval(checkCancellation, 100);
       
-      const response = await fetchWithTimeout(`${baseURL}/api/email/summary`, {
+      // Get current threads for summary
+      const threads = await this.fetchThreads(token);
+      
+      const response = await fetchWithTimeout(`${baseURL}/api/ai/summarize-inbox`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ threads }),
         signal: abortController.signal, // Add abort signal
       }, API_CONFIG.TIMEOUT);
 
@@ -570,7 +574,14 @@ export const emailService = {
         throw new Error('Request cancelled');
       }
       
-      return data.summary || 'Unable to generate summary';
+      // Handle cache status
+      if (data.cached) {
+        console.log('✅ Returning cached summary');
+        return `[CACHED] ${data.summary}`;
+      } else {
+        console.log('✅ Generated new summary');
+        return data.summary || 'Unable to generate summary';
+      }
     } catch (error) {
       // Clear the cancellation interval on error
       if (cancellationInterval) {

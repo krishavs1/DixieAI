@@ -11,6 +11,46 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Simple in-memory cache for summaries
+const summaryCache = new Map<string, {
+  summary: string;
+  timestamp: number;
+  emailCount: number;
+  userEmail: string;
+}>();
+
+// Cache duration: 30 minutes
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+// Helper function to get cache key
+const getCacheKey = (userEmail: string): string => {
+  const today = new Date().toDateString();
+  return `summary_${userEmail}_${today}`;
+};
+
+// Helper function to check if cache is valid
+const isCacheValid = (cacheEntry: any): boolean => {
+  const now = Date.now();
+  return (now - cacheEntry.timestamp) < CACHE_DURATION;
+};
+
+// Fallback summary generator
+function generateFallbackSummary(threads: any[]): string {
+  if (!threads || threads.length === 0) {
+    return "Your inbox is empty. No new emails to summarize.";
+  }
+  
+  const count = threads.length;
+  const unreadCount = threads.filter(t => !t.read).length;
+  const recentCount = threads.slice(0, 5).length;
+  
+  if (unreadCount > 0) {
+    return `You have ${count} emails in your inbox, with ${unreadCount} unread messages. The most recent emails are from ${recentCount} different senders.`;
+  } else {
+    return `You have ${count} emails in your inbox, all marked as read. Your inbox is up to date.`;
+  }
+}
+
 // Schema for AI reply generation
 const generateReplySchema = z.object({
   prompt: z.string(),
@@ -216,6 +256,152 @@ Generate a natural, professional email body that would be appropriate for this c
   }
 });
 
+// Generate inbox summary
+router.post('/summarize-inbox', authMiddleware, async (req: any, res: express.Response) => {
+  try {
+    const { threads, token } = req.body;
+    const userEmail = req.user.email;
+    
+    logger.info('Generating inbox summary for', threads?.length || 0, 'threads');
+    
+    // Check cache first
+    const cacheKey = getCacheKey(userEmail);
+    const cachedSummary = summaryCache.get(cacheKey);
+    
+    if (cachedSummary && isCacheValid(cachedSummary)) {
+      logger.info('Returning cached summary for user:', userEmail);
+      return res.json({
+        summary: cachedSummary.summary,
+        success: true,
+        source: 'cache',
+        cached: true,
+        emailCount: cachedSummary.emailCount,
+      });
+    }
+    
+    // Cache miss or expired - generate new summary
+    logger.info('Cache miss - generating new summary for user:', userEmail);
+    
+    // Check if OpenAI API key is configured
+    if (!process.env.OPENAI_API_KEY) {
+      logger.warn('OpenAI API key not configured, using fallback summary');
+      const fallbackSummary = generateFallbackSummary(threads);
+      
+      // Cache the fallback summary
+      summaryCache.set(cacheKey, {
+        summary: fallbackSummary,
+        timestamp: Date.now(),
+        emailCount: threads?.length || 0,
+        userEmail,
+      });
+      
+      return res.json({
+        summary: fallbackSummary,
+        success: true,
+        source: 'fallback',
+        cached: false,
+        emailCount: threads?.length || 0,
+      });
+    }
+    
+    // Create a summary of the inbox
+    const systemPrompt = `You are an intelligent email assistant that provides concise, actionable summaries of email inboxes.
+
+Your task is to:
+1. Analyze the email threads provided
+2. Identify key themes, urgent items, and important updates
+3. Provide a brief, conversational summary (2-3 sentences max)
+4. Highlight any emails that need immediate attention
+5. Keep the tone helpful and professional
+6. Focus on actionable insights
+
+Return ONLY the summary text. Do not include any formatting, headers, or metadata.`;
+
+    const threadSummaries = threads?.slice(0, 10).map((thread: any) => 
+      `From: ${thread.from}, Subject: ${thread.subject}, Date: ${thread.date}`
+    ).join('\n') || 'No emails found';
+
+    const userPrompt = `Please provide a brief summary of this inbox:
+
+${threadSummaries}
+
+Generate a concise, helpful summary of what's in this inbox.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt,
+        },
+        {
+          role: 'user',
+          content: userPrompt,
+        },
+      ],
+      max_tokens: 150,
+      temperature: 0.3,
+    });
+
+    const summary = response.choices[0]?.message?.content?.trim() || '';
+    
+    if (summary) {
+      logger.info('Successfully generated inbox summary');
+      
+      // Cache the generated summary
+      summaryCache.set(cacheKey, {
+        summary,
+        timestamp: Date.now(),
+        emailCount: threads?.length || 0,
+        userEmail,
+      });
+      
+      return res.json({
+        summary,
+        success: true,
+        source: 'openai',
+        cached: false,
+        emailCount: threads?.length || 0,
+      });
+    } else {
+      throw new Error('No summary generated from OpenAI');
+    }
+    
+  } catch (error) {
+    logger.error('Error generating inbox summary:', error);
+    
+    // Fallback to template-based summary
+    try {
+      const fallbackSummary = generateFallbackSummary(req.body.threads);
+      
+      // Cache the fallback summary
+      const userEmail = req.user.email;
+      const cacheKey = getCacheKey(userEmail);
+      summaryCache.set(cacheKey, {
+        summary: fallbackSummary,
+        timestamp: Date.now(),
+        emailCount: req.body.threads?.length || 0,
+        userEmail,
+      });
+      
+      return res.json({
+        summary: fallbackSummary,
+        success: true,
+        source: 'fallback',
+        error: 'AI service unavailable, using fallback',
+        cached: false,
+        emailCount: req.body.threads?.length || 0,
+      });
+    } catch (fallbackError) {
+      logger.error('Fallback summary generation failed:', fallbackError);
+      return res.status(500).json({ 
+        error: 'Failed to generate inbox summary',
+        success: false,
+      });
+    }
+  }
+});
+
 // Simple contextual reply generator (fallback)
 function generateContextualReply(context: any): string {
   const { originalMessage, sender, subject } = context;
@@ -252,5 +438,68 @@ function generateContextualReply(context: any): string {
   // Default professional reply
   return `Hi ${senderName},\n\nThank you for your email. I've received your message and will review it carefully. I'll respond with a detailed reply shortly. I appreciate you reaching out.\n\nBest regards,\nKrishav`;
 }
+
+// Cache management endpoints for demo purposes
+router.post('/clear-summary-cache', authMiddleware, async (req: any, res: express.Response) => {
+  try {
+    const userEmail = req.user.email;
+    const cacheKey = getCacheKey(userEmail);
+    
+    if (summaryCache.has(cacheKey)) {
+      summaryCache.delete(cacheKey);
+      logger.info('Cleared summary cache for user:', userEmail);
+      return res.json({
+        success: true,
+        message: 'Summary cache cleared successfully',
+      });
+    } else {
+      return res.json({
+        success: true,
+        message: 'No cache found to clear',
+      });
+    }
+  } catch (error) {
+    logger.error('Error clearing summary cache:', error);
+    return res.status(500).json({
+      error: 'Failed to clear cache',
+      success: false,
+    });
+  }
+});
+
+// Get cache status for debugging
+router.get('/cache-status', authMiddleware, async (req: any, res: express.Response) => {
+  try {
+    const userEmail = req.user.email;
+    const cacheKey = getCacheKey(userEmail);
+    const cachedSummary = summaryCache.get(cacheKey);
+    
+    if (cachedSummary) {
+      const isValid = isCacheValid(cachedSummary);
+      const timeRemaining = Math.max(0, CACHE_DURATION - (Date.now() - cachedSummary.timestamp));
+      
+      return res.json({
+        success: true,
+        hasCache: true,
+        isValid,
+        timeRemaining: Math.floor(timeRemaining / 1000), // seconds
+        emailCount: cachedSummary.emailCount,
+        source: cachedSummary.summary.includes('fallback') ? 'fallback' : 'openai',
+      });
+    } else {
+      return res.json({
+        success: true,
+        hasCache: false,
+        message: 'No cache found',
+      });
+    }
+  } catch (error) {
+    logger.error('Error getting cache status:', error);
+    return res.status(500).json({
+      error: 'Failed to get cache status',
+      success: false,
+    });
+  }
+});
 
 export default router; 

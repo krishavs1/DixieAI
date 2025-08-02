@@ -618,18 +618,57 @@ const HomeScreen = () => {
               return;
             }
             
-            if (isAwaitingConfirmation && (lowerText.includes('no') || lowerText.includes('cancel') || lowerText.includes('don\'t'))) {
-              console.log('✅ DETECTED NO CONFIRMATION - Cancelling email...');
-              await handleCancelReply();
+            // SIMPLE CONFIRMATION FLOW:
+            // 1. Send it - if they say "send it", "yes", "okay", etc.
+            // 2. Cancel - if they say "cancel", "no", "don't send", etc.
+            // 3. Everything else - pass to LLM to regenerate the reply
+            
+            if (isAwaitingConfirmation) {
+              // Check for send confirmation
+              if (lowerText.includes('send') || lowerText.includes('yes') || lowerText.includes('okay') || lowerText.includes('ok') || lowerText.includes('go ahead')) {
+                console.log('✅ DETECTED SEND CONFIRMATION - Sending email...');
+                await handleSendConfirmedReply();
+                return;
+              }
+              
+              // Check for cancellation
+              if (lowerText.includes('cancel') || lowerText.includes('no') || lowerText.includes('don\'t send') || lowerText.includes('stop')) {
+                console.log('✅ DETECTED CANCELLATION - Cancelling email...');
+                await handleCancelReply();
+                return;
+              }
+              
+              // Everything else - treat as edit request
+              console.log('✏️ DETECTED EDIT REQUEST - Regenerating reply...');
+              await handleEditRequest(text);
               return;
             }
             
-            // Fallback: If we have a pending reply but confirmation state is lost, still allow cancellation
-            if (hasPendingReply && (lowerText.includes('no') || lowerText.includes('cancel') || lowerText.includes('don\'t'))) {
-              console.log('✅ DETECTED NO CONFIRMATION (fallback) - Cancelling email...');
-              setAwaitingConfirmation(true); // Restore the state
-              awaitingConfirmationRef.current = true; // Restore the ref
-              await handleCancelReply();
+            // Fallback: If we have a pending reply but confirmation state is lost
+            if (hasPendingReply) {
+              // Check for send confirmation
+              if (lowerText.includes('send') || lowerText.includes('yes') || lowerText.includes('okay') || lowerText.includes('ok') || lowerText.includes('go ahead')) {
+                console.log('✅ DETECTED SEND CONFIRMATION (fallback) - Sending email...');
+                setAwaitingConfirmation(true);
+                awaitingConfirmationRef.current = true;
+                await handleSendConfirmedReply();
+                return;
+              }
+              
+              // Check for cancellation
+              if (lowerText.includes('cancel') || lowerText.includes('no') || lowerText.includes('don\'t send') || lowerText.includes('stop')) {
+                console.log('✅ DETECTED CANCELLATION (fallback) - Cancelling email...');
+                setAwaitingConfirmation(true);
+                awaitingConfirmationRef.current = true;
+                await handleCancelReply();
+                return;
+              }
+              
+              // Everything else - treat as edit request
+              console.log('✏️ DETECTED EDIT REQUEST (fallback) - Regenerating reply...');
+              setAwaitingConfirmation(true);
+              awaitingConfirmationRef.current = true;
+              await handleEditRequest(text);
               return;
             }
             
@@ -807,13 +846,15 @@ const HomeScreen = () => {
 
   // Handle summarize command
   const handleSummarizeCommand = async () => {
-    console.log('🚀 Starting summarize command...');
-    setAgentResponse('Generating inbox summary...');
-    
-    // Reset cancellation flag
-    globalCancellationFlagRef.current = false;
-    
     try {
+      // Check for cancellation before starting
+      if (globalCancellationFlagRef.current) {
+        console.log('🛑 Summary generation cancelled before starting');
+        return;
+      }
+      
+      setAgentResponse('Generating inbox summary...');
+      
       // Check for cancellation before making API call
       if (globalCancellationFlagRef.current) {
         console.log('🛑 Summary generation cancelled before API call');
@@ -836,7 +877,11 @@ const HomeScreen = () => {
         return;
       }
       
-      setAgentResponse(summary);
+      // Show cache status in response
+      const cacheStatus = summary.includes('[CACHED]') ? ' (cached)' : '';
+      const displaySummary = summary.replace('[CACHED]', '');
+      
+      setAgentResponse(displaySummary);
       
       // Check again before speaking
       if (globalCancellationFlagRef.current) {
@@ -844,7 +889,7 @@ const HomeScreen = () => {
         return;
       }
       
-      await speakResponse(summary);
+      await speakResponse(displaySummary);
       console.log('✅ Summarize command completed successfully');
     } catch (error) {
       // Check if cancelled before showing error
@@ -960,8 +1005,8 @@ const HomeScreen = () => {
         token: token,
       });
       
-      setAgentResponse(`Here's your reply: ${replyData.reply}`);
-      await speakResponse(replyData.reply);
+      setAgentResponse(`Here's your reply:\n\n${replyData.reply}`);
+      await speakResponse(`Here's your reply: ${replyData.reply}`);
       
       console.log('✅ Write reply command completed successfully');
          } catch (error) {
@@ -1012,9 +1057,9 @@ const HomeScreen = () => {
       isEditModeRef.current = true;
       
       // Ask for edits instead of confirmation
-      const editMessage = `Here's your reply: ${replyDraft}. Do you have any edits?`;
+      const editMessage = `Here's your reply:\n\n${replyDraft}\n\nDo you have any edits?`;
       setAgentResponse(editMessage);
-      await speakResponse(editMessage);
+      await speakResponse(`Here's your reply: ${replyDraft}. Do you have any edits?`);
       
       console.log('✅ Auto-reply draft generated, awaiting confirmation');
     } catch (error) {
@@ -1084,15 +1129,15 @@ const HomeScreen = () => {
     
     const lowerText = text.toLowerCase();
     
-    // Check if user wants to send the email
-    if (lowerText.includes('send it') || lowerText.includes('send') || lowerText.includes('yes') || lowerText.includes('go ahead')) {
+    // Check if user wants to send the email (more specific)
+    if (lowerText.includes('send it') || lowerText === 'send' || lowerText === 'yes' || lowerText === 'okay' || lowerText === 'ok' || lowerText.includes('go ahead')) {
       console.log('✅ DETECTED SEND COMMAND - Sending email...');
       await handleSendConfirmedReply();
       return;
     }
     
-    // Check if user wants to cancel
-    if (lowerText.includes('cancel') || lowerText.includes('no') || lowerText.includes('stop')) {
+    // Check if user wants to cancel (more specific)
+    if (lowerText === 'cancel' || lowerText === 'no' || lowerText === 'stop' || lowerText.includes('don\'t send') || lowerText.includes('cancel the')) {
       console.log('❌ DETECTED CANCEL COMMAND - Cancelling reply...');
       await handleCancelReply();
       return;
@@ -1134,9 +1179,9 @@ const HomeScreen = () => {
       pendingReplyRef.current = updatedReply;
       
       // Ask for more edits
-      const editMessage = `Here's your updated reply: ${updatedReply}. Do you have any edits?`;
+      const editMessage = `Here's your updated reply:\n\n${updatedReply}\n\nDo you have any edits?`;
       setAgentResponse(editMessage);
-      await speakResponse(editMessage);
+      await speakResponse(`Here's your updated reply: ${updatedReply}. Do you have any edits?`);
       
       console.log('✅ Reply updated with edit feedback');
     } catch (error) {
@@ -1276,7 +1321,7 @@ const HomeScreen = () => {
 
   const onSpeechStart = (event: any) => {
     console.log('Speech recognition started:', event);
-    // If we were in that “10 s follow‑up” window, cancel the auto–stop
+    // If we were in that "10 s follow‑up" window, cancel the auto–stop
     if (followUpTimerRef.current) {
       clearTimeout(followUpTimerRef.current);
       followUpTimerRef.current = null;
