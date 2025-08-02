@@ -7,7 +7,7 @@ class ApiService {
 
   constructor() {
     this.client = axios.create({
-      baseURL: API_CONFIG.BASE_URL,
+      baseURL: 'http://192.168.1.209:3000', // Use the current IP directly
       timeout: API_CONFIG.TIMEOUT,
       headers: {
         'Content-Type': 'application/json',

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import * as Speech from 'expo-speech';
+import elevenLabsTTS from '../services/elevenLabsTTS';
 
 import * as Clipboard from 'expo-clipboard';
 import Voice from '@react-native-community/voice';
@@ -408,7 +408,7 @@ const HomeScreen = () => {
     // If TTS is speaking, interrupt it immediately (same as wake word)
     if (isTtsSpeaking) {
       console.log('🛑 Interrupting TTS for mic button click');
-      Speech.stop();
+      elevenLabsTTS.stop();
       setIsTtsSpeaking(false);
     }
     
@@ -762,9 +762,8 @@ const HomeScreen = () => {
     }
   };
 
-  // Helper function to speak responses
+  // Helper function to speak responses using ElevenLabs
   const speakResponse = async (text: string) => {
-    if (Speech && typeof Speech.speak === 'function') {
       console.log('🎤 SPEAK RESPONSE CALLED - Text:', text.substring(0, 50) + '...');
       console.log('🎤 Current state - showVoiceAgent:', showVoiceAgent, 'isVoiceAgentClosed:', isVoiceAgentClosed);
       setIsTtsSpeaking(true);
@@ -789,10 +788,7 @@ const HomeScreen = () => {
         }
         
         try {
-          await Speech.speak(conversationalText, {
-            language: 'en-US',
-            pitch: 1.0,
-            rate: 1.0,
+          await elevenLabsTTS.speak(conversationalText, {
             onDone: () => {
               console.log('🎤 SPEECH DONE — entering follow‑up listening window');
               setIsTtsSpeaking(false);
@@ -818,30 +814,17 @@ const HomeScreen = () => {
               // Check kill switch and global cancellation right after speech starts - CHECK REF FIRST
               if (speechKillSwitchRef.current || speechKillSwitch || isVoiceAgentClosed || globalCancellationFlagRef.current) {
                 console.log('🛑 Killing speech immediately after start - REF:', speechKillSwitchRef.current, 'STATE:', speechKillSwitch, 'GLOBAL:', globalCancellationFlagRef.current);
-                Speech.stop();
+                elevenLabsTTS.stop();
                 setIsTtsSpeaking(false);
               }
             },
-            onStopped: () => {
-              console.log('Speech was stopped');
-              setIsTtsSpeaking(false);
-              
-              // Always start wake word detection after speech is stopped
-              console.log('🎧 Speech stopped, starting wake word detection...');
-              setTimeout(() => {
-                startWakeWordDetection();
-              }, 500);
-            },
+
           });
         } catch (error) {
-          console.error('Error starting speech:', error);
+          console.error('Error starting ElevenLabs TTS:', error);
           setIsTtsSpeaking(false);
         }
       }, 500);
-    } else {
-      console.log('Speech module not available for TTS');
-      setIsTtsSpeaking(false);
-    }
   };
 
   // Handle summarize command
@@ -1238,25 +1221,22 @@ const HomeScreen = () => {
     // NUCLEAR OPTION - Stop speech multiple ways
     try {
       // Method 1: Direct stop
-      Speech.stop();
-      console.log('Method 1: Direct Speech.stop() called');
+      elevenLabsTTS.stop();
+      console.log('Method 1: Direct elevenLabsTTS.stop() called');
       
       // Method 2: Restart with empty text to interrupt
-      Speech.speak('', {
-        language: 'en-US',
-        pitch: 0.1,
-        rate: 10,
-        onStart: () => { Speech.stop(); },
-        onError: () => { Speech.stop(); },
+      elevenLabsTTS.speak('', {
+        onStart: () => { elevenLabsTTS.stop(); },
+        onError: () => { elevenLabsTTS.stop(); },
       });
       console.log('Method 2: Empty speech interruption');
       
       // Method 3: Multiple stops with delays
-      setTimeout(() => Speech.stop(), 10);
-      setTimeout(() => Speech.stop(), 50);
-      setTimeout(() => Speech.stop(), 100);
-      setTimeout(() => Speech.stop(), 200);
-      setTimeout(() => Speech.stop(), 500);
+      setTimeout(() => elevenLabsTTS.stop(), 10);
+      setTimeout(() => elevenLabsTTS.stop(), 50);
+      setTimeout(() => elevenLabsTTS.stop(), 100);
+      setTimeout(() => elevenLabsTTS.stop(), 200);
+      setTimeout(() => elevenLabsTTS.stop(), 500);
       
       console.log('Method 3: Multiple delayed stops scheduled');
     } catch (error) {
@@ -1353,7 +1333,7 @@ const HomeScreen = () => {
       // If TTS is speaking, interrupt it immediately
       if (isTtsSpeaking) {
         console.log('🛑 Interrupting TTS for wake word');
-        Speech.stop();
+        elevenLabsTTS.stop();
         setIsTtsSpeaking(false);
       }
       
@@ -1370,7 +1350,7 @@ const HomeScreen = () => {
         // IMMEDIATELY stop any ongoing TTS
         if (isTtsSpeaking) {
           console.log('🛑 EMERGENCY STOP - Stopping TTS immediately');
-          Speech.stop();
+          elevenLabsTTS.stop();
           setIsTtsSpeaking(false);
         }
         
@@ -1580,7 +1560,7 @@ const HomeScreen = () => {
       // If TTS is speaking, interrupt it immediately
       if (isTtsSpeaking) {
         console.log('🛑 Interrupting TTS for new wake word');
-        Speech.stop();
+        elevenLabsTTS.stop();
         setIsTtsSpeaking(false);
       }
       
@@ -1597,7 +1577,7 @@ const HomeScreen = () => {
         // IMMEDIATELY stop any ongoing TTS
         if (isTtsSpeaking) {
           console.log('🛑 EMERGENCY STOP - Stopping TTS immediately');
-          Speech.stop();
+          elevenLabsTTS.stop();
           setIsTtsSpeaking(false);
         }
         
@@ -1677,14 +1657,11 @@ const HomeScreen = () => {
             }
             
             // Play a "Ready!" sound and start listening when it completes
-            if (Speech && typeof Speech.speak === 'function') {
+            if (typeof elevenLabsTTS.speak === 'function') {
               console.log('🎤 Speaking "Ready!" before starting to listen...');
               setIsTtsSpeaking(true);
               
-              Speech.speak('Ready!', {
-                language: 'en-US',
-                pitch: 1.0,
-                rate: 1.0,
+              elevenLabsTTS.speak('Ready!', {
                 onDone: () => {
                   console.log('🎤 "Ready!" completed, starting to listen...');
                   setIsTtsSpeaking(false);
@@ -1703,14 +1680,6 @@ const HomeScreen = () => {
                 },
                 onStart: () => {
                   console.log('🎤 "Ready!" started speaking...');
-                },
-                onStopped: () => {
-                  console.log('🎤 "Ready!" was stopped');
-                  setIsTtsSpeaking(false);
-                  // Add a small delay to ensure speech is fully stopped
-                  setTimeout(() => {
-                    startListening();
-                  }, 200);
                 },
               });
             } else {
@@ -1833,7 +1802,7 @@ const HomeScreen = () => {
       // If TTS is speaking, interrupt it immediately (same as wake word)
       if (isTtsSpeaking) {
         console.log('🛑 Interrupting TTS for mic button click');
-        Speech.stop();
+        elevenLabsTTS.stop();
         setIsTtsSpeaking(false);
       }
       
@@ -2176,7 +2145,7 @@ const HomeScreen = () => {
     
     if (isTtsSpeaking) {
       console.log('🛑 Stopping current speech...');
-      Speech.stop();
+      elevenLabsTTS.stop();
       setIsTtsSpeaking(false);
       return;
     }
@@ -2189,7 +2158,7 @@ const HomeScreen = () => {
 
   // Stop speaking
   const stopSpeaking = () => {
-    Speech.stop();
+    elevenLabsTTS.stop();
     setIsTtsSpeaking(false);
   };
 
