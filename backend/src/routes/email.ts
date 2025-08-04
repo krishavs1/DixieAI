@@ -86,7 +86,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     
     const response = await gmail.users.threads.list({
       userId: 'me',
-      maxResults: 50, // Increased to 50 threads
+      maxResults: 150, // Increased to 150 threads
       q: req.query.q as string || '',
     });
 
@@ -777,13 +777,13 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Re
     
     const { gmail, tryWithRefresh } = createGmailClient(accessToken, refreshToken);
     
-    // Get threads (limit to 50 for summary)
+    // Get threads (limit to 150 for summary)
     let threadsResponse;
     try {
       threadsResponse = await withTimeout(
         gmail.users.threads.list({
           userId: 'me',
-          maxResults: 50,
+          maxResults: 150,
         }),
         10000
       );
@@ -797,7 +797,7 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Re
         threadsResponse = await withTimeout(
           gmail.users.threads.list({
             userId: 'me',
-            maxResults: 50,
+            maxResults: 150,
           }),
           10000
         );

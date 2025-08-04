@@ -2375,12 +2375,6 @@ const HomeScreen = () => {
           <TouchableOpacity onPress={handleVoiceCommand} style={styles.voiceButton}>
             <Ionicons name="mic" size={20} color="#4285F4" />
           </TouchableOpacity>
-          {isWakeWordListening && (
-            <View style={styles.wakeWordIndicator}>
-              <Ionicons name="ear" size={12} color="#34A853" />
-              <Text style={styles.wakeWordText}>Listening</Text>
-            </View>
-          )}
         </View>
 
         {/* Clear Filters Button */}
