@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+backend/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -54,5 +55,8 @@ expo-env.d.ts
 
 # Logs
 logs/
-*.logios/Pods/
+*.log
+
+# iOS
+ios/Pods/
 backend/ios/Pods/
