@@ -10,7 +10,7 @@ const getBackendURL = async (): Promise<string> => {
     return cachedBackendURL;
   }
   if (!__DEV__) {
-    return 'https://your-backend-url.com';
+    return 'https://dixieai.onrender.com';
   }
 
   const port = 3000;
