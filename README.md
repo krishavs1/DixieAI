@@ -4,13 +4,11 @@ A React Native mobile app that provides AI-powered email management using Gmail 
 
 ## Features
 
-- 🔐 **Google Sign-In** - Secure authentication with Gmail
-- 📧 **Email Management** - View, search, and manage email threads
-- 🤖 **AI-Powered Replies** - Generate intelligent, contextual email replies using OpenAI GPT-4
-- 🎯 **Smart Context Analysis** - AI understands email content and generates appropriate responses
-- 🔄 **Fallback System** - Template-based replies when AI service is unavailable
-- 🌙 **Dark Mode** - Beautiful dark and light themes
-- 📱 **Cross Platform** - Works on iOS and Android
+- **Google Sign-In** - Secure authentication with Gmail
+- **Email Management** - View, search, and manage email threads
+- **AI-Powered Replies** - Generate intelligent, contextual email replies using OpenAI GPT-4
+- **Smart Context Analysis** - AI understands email content and generates appropriate responses
+- **Fallback System** - Template-based replies when AI service is unavailable
 
 ## Dynamic IP Detection
 
