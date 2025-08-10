@@ -1,4 +1,4 @@
-import { decode } from 'he';
+const he = require('he');
 
 
 
@@ -21,7 +21,7 @@ export function processEmailHtml({ html, shouldLoadImages, theme = 'light' }: Pr
   const isDarkTheme = theme === 'dark';
 
   // Decode HTML entities
-  processedHtml = decode(processedHtml);
+  processedHtml = he.decode(processedHtml);
 
   // Remove DOCTYPE, html, head, and body tags that interfere with react-native-render-html
   processedHtml = processedHtml
@@ -487,7 +487,7 @@ export function processEmailHtml({ html, shouldLoadImages, theme = 'light' }: Pr
   processedHtml = `${themeStyles}<div class="gmail-content">${processedHtml}</div>`;
 
   // Generate plain text version
-  const plainTextContent = decode(html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim());
+  const plainTextContent = he.decode(html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim());
 
   return {
     processedHtml,
@@ -497,7 +497,7 @@ export function processEmailHtml({ html, shouldLoadImages, theme = 'light' }: Pr
 }
 
 export function stripHtmlTags(html: string): string {
-  return decode(html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim());
+  return he.decode(html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim());
 }
 
 export function extractEmailBody(payload: any): string {

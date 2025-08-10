@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Backend API for Dixie AI Email Assistant",
   "main": "dist/index.js",
+  "engines": {
+    "node": "18.x"
+  },
   "scripts": {
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc",
