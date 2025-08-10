@@ -5,7 +5,7 @@ import { authMiddleware } from '../middleware/auth';
 import { z } from 'zod';
 import { processEmailHtml, extractEmailBody, findInlineImages, processInlineImages } from '../utils/emailProcessor';
 import { AIService, EmailContent } from '../services/aiService';
-import he from 'he';
+import { decode } from 'he';
 
 interface AuthRequest extends express.Request {
   user?: any;
@@ -148,7 +148,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
 
           return {
             id: thread.id,
-            snippet: he.decode(thread.snippet || ''),
+            snippet: decode(thread.snippet || ''),
             from: extractDisplayName(from),
             subject,
             date,
@@ -161,7 +161,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
           // Return basic info even if metadata fetch fails
           return {
             id: thread.id,
-            snippet: he.decode(thread.snippet || ''),
+            snippet: decode(thread.snippet || ''),
             from: 'Unknown Sender',
             subject: thread.snippet ? thread.snippet.substring(0, 50) + '...' : '(No Subject)',
             date: new Date().toISOString(),
@@ -459,7 +459,7 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
           rawBody: rawBody, // Keep original for debugging
           plainTextContent: processedResult.plainTextContent,
           hasBlockedImages: processedResult.hasBlockedImages,
-          snippet: he.decode(message.snippet || ''),
+          snippet: decode(message.snippet || ''),
           attachments: attachments.length > 0 ? attachments : undefined,
         };
         } catch (error) {
@@ -472,11 +472,11 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
             fromRaw: headers.find(h => h.name === 'From')?.value || '', // Add original "From" field
             subject: headers.find(h => h.name === 'Subject')?.value || '',
             date: headers.find(h => h.name === 'Date')?.value || '',
-            body: he.decode(message.snippet || 'Message content could not be loaded'),
+            body: decode(message.snippet || 'Message content could not be loaded'),
             rawBody: '',
             plainTextContent: message.snippet || '',
             hasBlockedImages: false,
-            snippet: he.decode(message.snippet || ''),
+            snippet: decode(message.snippet || ''),
           };
         }
       })
