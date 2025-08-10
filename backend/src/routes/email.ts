@@ -5,7 +5,7 @@ import { authMiddleware } from '../middleware/auth';
 import { z } from 'zod';
 import { processEmailHtml, extractEmailBody, findInlineImages, processInlineImages } from '../utils/emailProcessor';
 import { AIService, EmailContent } from '../services/aiService';
-import * as he from 'he';
+import he from 'he';
 
 interface AuthRequest extends express.Request {
   user?: any;
