@@ -10,36 +10,6 @@ A React Native mobile app that provides AI-powered email management using Gmail 
 - **Smart Context Analysis** - AI understands email content and generates appropriate responses
 - **Fallback System** - Template-based replies when AI service is unavailable
 
-## Dynamic IP Detection
-
-The app automatically detects your backend server's IP address, so you never need to manually update configuration when switching networks.
-
-### How It Works
-
-1. **Automatic Discovery** - App tries common local IP patterns
-2. **Health Check** - Verifies each IP with a backend health check
-3. **Caching** - Remembers the working IP for 5 minutes
-4. **Network Monitoring** - Automatically refreshes when network changes
-5. **Fallback** - Falls back to localhost if no network IP works
-
-### Supported IP Patterns
-
-- `192.168.1.209` (Your current network)
-- `172.20.214.39` (Your previous network)
-- `localhost` / `127.0.0.1`
-- `10.0.0.1`
-- `192.168.0.1`
-- `192.168.1.1`
-
-### Manual Refresh
-
-If the automatic detection fails:
-1. Tap the refresh button next to the server status
-2. Or restart the app
-3. The app will re-scan for the correct IP
-
-## Setup
-
 ### Prerequisites
 
 - Node.js 16+
