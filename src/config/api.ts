@@ -9,6 +9,9 @@ const getBackendURL = async (): Promise<string> => {
   if (cachedBackendURL) {
     return cachedBackendURL;
   }
+  // Temporarily force production URL for testing
+  return 'https://dixieai.onrender.com';
+  
   if (!__DEV__) {
     return 'https://dixieai.onrender.com';
   }
