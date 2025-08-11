@@ -78,9 +78,9 @@ router.post('/label-existing', async (req, res) => {
 });
 
 // Process and label user's emails automatically
-router.post('/process-user-emails', async (req: AuthRequest, res) => {
+router.post('/process-user-emails', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { accessToken, refreshToken } = req.body;
+    const { accessToken } = req.user;
     
     if (!accessToken) {
       return res.status(400).json({ error: 'Missing access token' });
@@ -89,7 +89,7 @@ router.post('/process-user-emails', async (req: AuthRequest, res) => {
     logger.info('Starting to process and label user emails');
     
     // Create Gmail client
-    const { gmail, tryWithRefresh } = createGmailClient(accessToken, refreshToken);
+    const { gmail, tryWithRefresh } = createGmailClient(accessToken);
     
     // Fetch recent emails (limit to 50 for testing)
     const maxResults = 50;

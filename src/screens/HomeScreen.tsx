@@ -2171,19 +2171,29 @@ const HomeScreen = () => {
       });
 
       // Call the new endpoint to process and label emails
+      console.log('🔍 Making request to process emails with token:', token.substring(0, 20) + '...');
+      
+      const requestBody = {
+        accessToken: token
+      };
+      console.log('🔍 Request body:', JSON.stringify(requestBody, null, 2));
+      
       const response = await fetch(`https://dixieai.onrender.com/api/email/process-user-emails`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          accessToken: token
-        })
+        body: JSON.stringify(requestBody)
       });
+      
+      console.log('🔍 Response status:', response.status);
+      console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.log('🔍 Error response body:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
