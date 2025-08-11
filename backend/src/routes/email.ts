@@ -77,6 +77,96 @@ router.post('/label-existing', async (req, res) => {
   }
 });
 
+// Process and label user's emails automatically
+router.post('/process-user-emails', async (req: AuthRequest, res) => {
+  try {
+    const { accessToken, refreshToken } = req.body;
+    
+    if (!accessToken) {
+      return res.status(400).json({ error: 'Missing access token' });
+    }
+
+    logger.info('Starting to process and label user emails');
+    
+    // Create Gmail client
+    const { gmail, tryWithRefresh } = createGmailClient(accessToken, refreshToken);
+    
+    // Fetch recent emails (limit to 50 for testing)
+    const maxResults = 50;
+    logger.info(`Fetching ${maxResults} recent emails for labeling`);
+    
+    const threadsResponse = await gmail.users.threads.list({
+      userId: 'me',
+      maxResults,
+      q: 'in:inbox' // Only inbox emails
+    });
+    
+    const threads = threadsResponse.data.threads || [];
+    logger.info(`Found ${threads.length} email threads`);
+    
+    // Process each thread to get email details
+    const emails: EmailContent[] = [];
+    
+    for (const thread of threads) {
+      try {
+        const threadResponse = await gmail.users.threads.get({
+          userId: 'me',
+          id: thread.id!
+        });
+        
+        const messages = threadResponse.data.messages || [];
+        if (messages.length > 0) {
+          const message = messages[0]; // Get the most recent message in thread
+          const headers = message.payload?.headers || [];
+          
+          const from = headers.find(h => h.name === 'From')?.value || '';
+          const subject = headers.find(h => h.name === 'Subject')?.value || '';
+          const body = he.decode(message.snippet || '');
+          
+          emails.push({
+            from,
+            subject,
+            body,
+            snippet: body.substring(0, 100)
+          });
+        }
+      } catch (error) {
+        logger.error(`Error processing thread ${thread.id}:`, error);
+        // Continue with other threads
+      }
+    }
+    
+    logger.info(`Processed ${emails.length} emails for labeling`);
+    
+    // Label the emails using AI
+    const labels = await AIService.labelEmailsBatch(emails);
+    
+    // Combine emails with their labels
+    const labeledEmails = emails.map((email, index) => ({
+      ...email,
+      label: labels[index]
+    }));
+    
+    return res.json({
+      success: true,
+      processed: emails.length,
+      labeledEmails,
+      summary: {
+        needsReply: labeledEmails.filter(e => e.label.label === 'NEEDS_REPLY').length,
+        important: labeledEmails.filter(e => e.label.label === 'IMPORTANT_UPDATE').length,
+        marketing: labeledEmails.filter(e => e.label.label === 'MARKETING').length,
+        receipts: labeledEmails.filter(e => e.label.label === 'RECEIPTS').length,
+        other: labeledEmails.filter(e => e.label.label === 'OTHER').length
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    logger.error('Error processing user emails:', error);
+    return res.status(500).json({ error: 'Failed to process emails' });
+  }
+});
+
 // Helper function to create Gmail client with automatic token refresh
 const createGmailClient = (accessToken: string, refreshToken?: string) => {
   const oauth2Client = new google.auth.OAuth2();
