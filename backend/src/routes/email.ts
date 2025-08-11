@@ -41,7 +41,7 @@ router.post('/test-label', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error in test-label endpoint:', error);
-    res.status(500).json({ error: 'Failed to label email' });
+    return res.status(500).json({ error: 'Failed to label email' });
   }
 });
 
@@ -73,7 +73,7 @@ router.post('/label-existing', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error in label-existing endpoint:', error);
-    res.status(500).json({ error: 'Failed to label emails' });
+    return res.status(500).json({ error: 'Failed to label emails' });
   }
 });
 
