@@ -24,6 +24,7 @@ import Voice from '@react-native-community/voice';
 import { useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { emailService, EmailThread, EmailLabel, EmailCategory, EmailCategoryInfo, SYSTEM_LABELS } from '../services/emailService';
+
 import { showMessage } from 'react-native-flash-message';
 import dayjs from 'dayjs';
 
@@ -2120,22 +2121,99 @@ const HomeScreen = () => {
 
   // Generate and display inbox summary
   const generateInboxSummary = async () => {
-    if (!token) return;
-    
-    setIsGeneratingSummary(true);
-    setShowSummaryModal(true);
-    
     try {
+      setIsGeneratingSummary(true);
+      setSummaryText('');
+      
+      const token = authContext?.token;
+      if (!token) {
+        showMessage({
+          message: 'Error',
+          description: 'Not authenticated',
+          type: 'danger',
+        });
+        return;
+      }
+
       const summary = await emailService.generateInboxSummary(token);
       setSummaryText(summary);
-      
-      // Auto-speak the summary
-      speakSummary(summary);
+      setShowSummaryModal(true);
     } catch (error) {
       console.error('Error generating summary:', error);
-      setSummaryText('Sorry, I had trouble analyzing your inbox. Please try again.');
+      showMessage({
+        message: 'Error',
+        description: 'Failed to generate summary',
+        type: 'danger',
+      });
     } finally {
       setIsGeneratingSummary(false);
+    }
+  };
+
+  const processEmailsWithAI = async () => {
+    try {
+      setIsLoading(true);
+      
+      const token = authContext?.token;
+      if (!token) {
+        showMessage({
+          message: 'Error',
+          description: 'Not authenticated',
+          type: 'danger',
+        });
+        return;
+      }
+
+      showMessage({
+        message: 'Processing Emails',
+        description: 'AI is analyzing your emails...',
+        type: 'info',
+      });
+
+      // Call the new endpoint to process and label emails
+      const response = await fetch(`https://dixieai.onrender.com/api/email/process-user-emails`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          accessToken: token
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        showMessage({
+          message: 'Success!',
+          description: `Processed ${result.processed} emails. Summary: ${result.summary.needsReply} need reply, ${result.summary.important} important updates`,
+          type: 'success',
+        });
+        
+        // Log the results for debugging
+        console.log('Email processing results:', result);
+        
+        // You can store these results or use them for instant summaries
+        // For now, just show the summary
+        setSummaryText(`Email Analysis Complete!\n\nYou have:\n• ${result.summary.needsReply} emails that need your reply\n• ${result.summary.important} important updates\n• ${result.summary.marketing} marketing emails\n• ${result.summary.receipts} receipts\n• ${result.summary.other} other emails`);
+        setShowSummaryModal(true);
+      } else {
+        throw new Error('Failed to process emails');
+      }
+    } catch (error) {
+      console.error('Error processing emails:', error);
+      showMessage({
+        message: 'Error',
+        description: 'Failed to process emails with AI',
+        type: 'danger',
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -2357,6 +2435,9 @@ const HomeScreen = () => {
              currentCategory === 'updates' ? 'Updates' :
              currentCategory === 'sent' ? 'Sent' : 'Primary'}
           </Text>
+          <TouchableOpacity onPress={processEmailsWithAI} style={styles.aiButton} disabled={isLoading}>
+            <Ionicons name="sparkles" size={24} color={isLoading ? "#ccc" : "#4285F4"} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={logout} style={styles.logoutButton}>
             <Ionicons name="log-out-outline" size={24} color="#666" />
           </TouchableOpacity>
@@ -2790,6 +2871,10 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
+  },
+  aiButton: {
+    padding: 5,
+    marginRight: 8,
   },
   logoutButton: {
     padding: 5,

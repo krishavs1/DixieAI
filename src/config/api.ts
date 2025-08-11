@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 let cachedBackendURL: string | null = null;
 
 // Simplified backend URL resolver with better error handling
-const getBackendURL = async (): Promise<string> => {
+export const getBackendURL = async (): Promise<string> => {
   // Return cached URL if available
   if (cachedBackendURL) {
     return cachedBackendURL;
@@ -44,7 +44,7 @@ const getBackendURL = async (): Promise<string> => {
         cachedBackendURL = url; // Cache the successful URL
         return url;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.log(`❌ Backend failed at: ${url} - ${errorMessage}`);
       // Don't throw, just continue to next URL
