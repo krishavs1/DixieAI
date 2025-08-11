@@ -13,6 +13,70 @@ interface AuthRequest extends express.Request {
 
 const router = express.Router();
 
+// Test endpoint for email labeling
+router.post('/test-label', async (req, res) => {
+  try {
+    const { sender, subject, body } = req.body;
+    
+    if (!sender || !subject || !body) {
+      return res.status(400).json({ error: 'Missing required fields: sender, subject, body' });
+    }
+
+    const emailContent: EmailContent = {
+      from: sender,
+      subject,
+      body,
+      snippet: body.substring(0, 100)
+    };
+
+    logger.info(`Testing email labeling for: ${subject}`);
+    
+    const label = await AIService.labelEmail(emailContent);
+    
+    res.json({
+      success: true,
+      email: emailContent,
+      label,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error in test-label endpoint:', error);
+    res.status(500).json({ error: 'Failed to label email' });
+  }
+});
+
+// Batch label existing emails (for initial processing)
+router.post('/label-existing', async (req, res) => {
+  try {
+    const { emails } = req.body;
+    
+    if (!emails || !Array.isArray(emails)) {
+      return res.status(400).json({ error: 'Missing or invalid emails array' });
+    }
+
+    logger.info(`Starting batch labeling for ${emails.length} emails`);
+    
+    const emailContents: EmailContent[] = emails.map((email: any) => ({
+      from: email.from || email.sender || '',
+      subject: email.subject || '',
+      body: email.body || email.snippet || '',
+      snippet: email.snippet || ''
+    }));
+
+    const labels = await AIService.labelEmailsBatch(emailContents);
+    
+    res.json({
+      success: true,
+      processed: emails.length,
+      labels,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error in label-existing endpoint:', error);
+    res.status(500).json({ error: 'Failed to label emails' });
+  }
+});
+
 // Helper function to create Gmail client with automatic token refresh
 const createGmailClient = (accessToken: string, refreshToken?: string) => {
   const oauth2Client = new google.auth.OAuth2();

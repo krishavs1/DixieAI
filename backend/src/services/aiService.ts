@@ -15,6 +15,12 @@ export interface EmailClassification {
   confidence?: number;
 }
 
+export interface EmailLabel {
+  label: 'NEEDS_REPLY' | 'IMPORTANT_UPDATE' | 'MARKETING' | 'SPAM' | 'RECEIPTS' | 'NEWSLETTER' | 'WORK' | 'PERSONAL' | 'OTHER';
+  confidence: number;
+  reasoning?: string;
+}
+
 export interface EmailContent {
   subject: string;
   body: string;
@@ -98,21 +104,19 @@ Does this email require a reply? (yes/no):`;
       const systemPrompt = `You are an email triage assistant. Your job is to determine if an email contains important updates that require attention.
 
 Consider these as IMPORTANT updates:
-- Job offers, acceptances, or rejections
-- Security alerts or account changes
-- Important deadlines or due dates
-- Financial transactions or billing issues
-- Health or medical information
-- Legal documents or contracts
-- Critical system notifications
-- Important personal news or events
+- Critical business information
+- Security alerts or account issues
+- Payment confirmations or billing issues
+- Legal or compliance matters
+- Health or safety information
+- Major life events or personal emergencies
 
 Do NOT consider these as important:
-- Marketing emails or promotions
-- Newsletter subscriptions
+- Regular newsletters
+- Marketing promotions
 - Social media notifications
-- General promotional content
-- Routine automated notifications
+- Automated system messages
+- Routine updates
 
 Respond ONLY with "yes" or "no".`;
 
@@ -142,13 +146,122 @@ Does this email contain important updates? (yes/no):`;
         confidence: 0.9,
       };
     } catch (error) {
-      logger.error('Error classifying important email:', error);
-      // Default to false on error to avoid false positives
+      logger.error('Error classifying important emails:', error);
       return {
         needsReply: false,
         isImportant: false,
         confidence: 0,
       };
+    }
+  }
+
+  /**
+   * AI Email Labeling - Categorizes emails into specific labels
+   */
+  static async labelEmail(email: EmailContent): Promise<EmailLabel> {
+    try {
+      // Clean and prepare email content
+      const cleanBody = this.cleanEmailContent(email.body);
+      const content = `${email.subject}\n\n${cleanBody}`.substring(0, 800); // Slightly more content for better accuracy
+
+      const systemPrompt = `You are an email categorization assistant. Analyze the email and assign the most appropriate label from these options:
+
+LABELS:
+- NEEDS_REPLY: Email requires a response (questions, requests, meeting invites, action items)
+- IMPORTANT_UPDATE: Critical information, security alerts, billing issues, legal matters
+- MARKETING: Promotional content, sales pitches, product announcements
+- SPAM: Unwanted emails, scams, phishing attempts
+- RECEIPTS: Purchase confirmations, payment receipts, billing statements
+- NEWSLETTER: Newsletters, subscriptions, regular updates
+- WORK: Work-related emails from colleagues, clients, business contacts
+- PERSONAL: Personal emails from friends, family, personal contacts
+- OTHER: Doesn't fit other categories
+
+RULES:
+- Choose the MOST specific label that applies
+- If multiple labels could apply, choose the most actionable one
+- Consider sender domain, subject line, and content
+- Be conservative with SPAM labeling
+
+Respond with ONLY the label name (e.g., "NEEDS_REPLY").`;
+
+      const userPrompt = `Email from: ${email.from}
+Subject: ${email.subject}
+Content: ${content}
+
+Label this email:`;
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.1, // Low temperature for consistent labeling
+        max_tokens: 20,
+      });
+
+      const result = response.choices[0]?.message?.content?.trim().toUpperCase() || 'OTHER';
+      
+      // Validate the result is a valid label
+      const validLabels = ['NEEDS_REPLY', 'IMPORTANT_UPDATE', 'MARKETING', 'SPAM', 'RECEIPTS', 'NEWSLETTER', 'WORK', 'PERSONAL', 'OTHER'];
+      const label = validLabels.includes(result) ? result as EmailLabel['label'] : 'OTHER';
+
+      logger.info(`Email labeled as: ${label} for subject: ${email.subject}`);
+
+      return {
+        label,
+        confidence: 0.9,
+        reasoning: `AI categorized as ${label} based on content analysis`
+      };
+    } catch (error) {
+      logger.error('Error labeling email:', error);
+      // Default to OTHER on error
+      return {
+        label: 'OTHER',
+        confidence: 0,
+        reasoning: 'Error occurred during AI labeling'
+      };
+    }
+  }
+
+  /**
+   * Batch label multiple emails (for initial processing)
+   */
+  static async labelEmailsBatch(emails: EmailContent[]): Promise<EmailLabel[]> {
+    try {
+      logger.info(`Starting batch labeling for ${emails.length} emails`);
+      
+      const labels: EmailLabel[] = [];
+      
+      // Process emails in parallel batches to avoid rate limits
+      const batchSize = 5; // Process 5 emails at a time
+      
+      for (let i = 0; i < emails.length; i += batchSize) {
+        const batch = emails.slice(i, i + batchSize);
+        const batchPromises = batch.map(email => this.labelEmail(email));
+        
+        const batchResults = await Promise.all(batchPromises);
+        labels.push(...batchResults);
+        
+        // Small delay between batches to avoid rate limits
+        if (i + batchSize < emails.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        logger.info(`Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(emails.length / batchSize)}`);
+      }
+      
+      logger.info(`Completed batch labeling for ${emails.length} emails`);
+      return labels;
+    } catch (error) {
+      logger.error('Error in batch labeling:', error);
+      // Return default labels for all emails on error
+      return emails.map(() => ({
+        label: 'OTHER',
+        confidence: 0,
+        reasoning: 'Error occurred during batch labeling'
+      }));
     }
   }
 
