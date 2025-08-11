@@ -33,7 +33,7 @@ router.post('/test-label', async (req, res) => {
     
     const label = await AIService.labelEmail(emailContent);
     
-    res.json({
+    return res.json({
       success: true,
       email: emailContent,
       label,
@@ -65,7 +65,7 @@ router.post('/label-existing', async (req, res) => {
 
     const labels = await AIService.labelEmailsBatch(emailContents);
     
-    res.json({
+    return res.json({
       success: true,
       processed: emails.length,
       labels,
