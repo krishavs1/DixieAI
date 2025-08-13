@@ -45,6 +45,7 @@ const HomeScreen = () => {
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [summaryText, setSummaryText] = useState('');
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [aiLabels, setAiLabels] = useState<{[threadId: string]: string}>({});
 
 
   // Add state for visual feedback
@@ -2208,9 +2209,22 @@ const HomeScreen = () => {
         // Log the results for debugging
         console.log('Email processing results:', result);
         
+        // Store AI labels for each email
+        const newAiLabels: {[threadId: string]: string} = {};
+        result.labeledEmails.forEach((email: any) => {
+          // Find the thread ID by matching email content
+          const matchingThread = threads.find(thread => 
+            thread.subject === email.subject && thread.from === email.from
+          );
+          if (matchingThread) {
+            newAiLabels[matchingThread.id] = email.label.label;
+          }
+        });
+        setAiLabels(newAiLabels);
+        
         // You can store these results or use them for instant summaries
         // For now, just show the summary
-        setSummaryText(`Email Analysis Complete!\n\nYou have:\n• ${result.summary.needsReply} emails that need your reply\n• ${result.summary.important} important updates\n• ${result.summary.marketing} marketing emails\n• ${result.summary.receipts} receipts\n• ${result.summary.other} other emails`);
+        setSummaryText(`Email Analysis Complete!\n\nYou have:\n• ${result.summary.needsReply} emails that need your reply\n• ${result.summary.important} important updates\n• ${result.summary.marketing} marketing emails\n• ${result.summary.receipts} receipts\n• ${result.summary.newsletter} newsletters\n• ${result.summary.spam} spam emails\n• ${result.summary.work} work emails\n• ${result.summary.personal} personal emails\n• ${result.summary.other} other emails\n\nTotal: ${result.processed} emails processed`);
         setShowSummaryModal(true);
       } else {
         throw new Error('Failed to process emails');
@@ -2307,6 +2321,31 @@ const HomeScreen = () => {
   };
 
   // Helper: format time/date like Gmail
+  const getAiLabelColor = (label: string): string => {
+    switch (label) {
+      case 'NEEDS_REPLY':
+        return '#FF6B6B'; // Red
+      case 'IMPORTANT_UPDATE':
+        return '#FF8E53'; // Orange
+      case 'MARKETING':
+        return '#4ECDC4'; // Teal
+      case 'NEWSLETTER':
+        return '#45B7D1'; // Blue
+      case 'SPAM':
+        return '#96CEB4'; // Green
+      case 'RECEIPTS':
+        return '#FFEAA7'; // Yellow
+      case 'WORK':
+        return '#DDA0DD'; // Plum
+      case 'PERSONAL':
+        return '#98D8C8'; // Mint
+      case 'OTHER':
+        return '#F7DC6F'; // Light yellow
+      default:
+        return '#95A5A6'; // Gray
+    }
+  };
+
   const formatThreadTime = (dateString: string): string => {
     if (!dateString) return 'No date';
     
@@ -2388,15 +2427,22 @@ const HomeScreen = () => {
                 <Text style={styles.importantBadgeText}>Important</Text>
               </View>
             )}
-            {item.labels && item.labels.slice(0, 3).map(labelId => {
-              const label = labels.find(l => l.id === labelId);
-              return label ? (
-                <View key={labelId} style={[styles.threadLabel, { backgroundColor: label.color }]}>
-                  <Text style={styles.threadLabelText}>{label.name}</Text>
-                </View>
-              ) : null;
-            })}
-            {item.labels && item.labels.length > 3 && (
+            {aiLabels[item.id] ? (
+              <View style={[styles.threadLabel, { backgroundColor: getAiLabelColor(aiLabels[item.id]) }]}>
+                <Text style={styles.threadLabelText}>{aiLabels[item.id]}</Text>
+              </View>
+            ) : (
+              // Show original labels if no AI label exists
+              item.labels && item.labels.slice(0, 3).map(labelId => {
+                const label = labels.find(l => l.id === labelId);
+                return label ? (
+                  <View key={labelId} style={[styles.threadLabel, { backgroundColor: label.color }]}>
+                    <Text style={styles.threadLabelText}>{label.name}</Text>
+                  </View>
+                ) : null;
+              })
+            )}
+            {!aiLabels[item.id] && item.labels && item.labels.length > 3 && (
               <Text style={styles.moreLabelText}>+{item.labels.length - 3}</Text>
             )}
           </View>
