@@ -2231,7 +2231,7 @@ const HomeScreen = () => {
         
         // You can store these results or use them for instant summaries
         // For now, just show the summary
-        setSummaryText(`Email Analysis Complete!\n\nYou have:\n• ${result.summary.needsReply} emails that need your reply\n• ${result.summary.important} important updates\n• ${result.summary.marketing} marketing emails\n• ${result.summary.receipts} receipts\n• ${result.summary.newsletter} newsletters\n• ${result.summary.spam} spam emails\n• ${result.summary.work} work emails\n• ${result.summary.personal} personal emails\n• ${result.summary.other} other emails\n\nTotal: ${result.processed} emails processed`);
+        setSummaryText(`Email Analysis Complete!\n\nYou have:\n• ${result.summary.needsReply || 0} emails that need your reply\n• ${result.summary.important || 0} important updates\n• ${result.summary.marketing || 0} marketing emails\n• ${result.summary.receipts || 0} receipts\n• ${result.summary.newsletter || 0} newsletters\n• ${result.summary.spam || 0} spam emails\n• ${result.summary.work || 0} work emails\n• ${result.summary.personal || 0} personal emails\n• ${result.summary.other || 0} other emails\n\nTotal: ${result.processed} emails processed`);
         setShowSummaryModal(true);
       } else {
         throw new Error('Failed to process emails');
@@ -2434,23 +2434,10 @@ const HomeScreen = () => {
                 <Text style={styles.importantBadgeText}>Important</Text>
               </View>
             )}
-            {aiLabels[item.id] ? (
+            {aiLabels[item.id] && (
               <View style={[styles.threadLabel, { backgroundColor: getAiLabelColor(aiLabels[item.id]) }]}>
                 <Text style={styles.threadLabelText}>{aiLabels[item.id]}</Text>
               </View>
-            ) : (
-              // Show original labels if no AI label exists
-              item.labels && item.labels.slice(0, 3).map(labelId => {
-                const label = labels.find(l => l.id === labelId);
-                return label ? (
-                  <View key={labelId} style={[styles.threadLabel, { backgroundColor: label.color }]}>
-                    <Text style={styles.threadLabelText}>{label.name}</Text>
-                  </View>
-                ) : null;
-              })
-            )}
-            {!aiLabels[item.id] && item.labels && item.labels.length > 3 && (
-              <Text style={styles.moreLabelText}>+{item.labels.length - 3}</Text>
             )}
           </View>
       </View>
