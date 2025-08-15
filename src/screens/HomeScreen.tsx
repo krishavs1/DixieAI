@@ -2179,14 +2179,21 @@ const HomeScreen = () => {
       };
       console.log('🔍 Request body:', JSON.stringify(requestBody, null, 2));
       
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      
       const response = await fetch(`https://dixieai.onrender.com/api/email/process-user-emails`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       console.log('🔍 Response status:', response.status);
       console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
