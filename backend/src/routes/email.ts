@@ -156,6 +156,10 @@ router.post('/process-user-emails', authMiddleware, async (req: AuthRequest, res
         important: labeledEmails.filter(e => e.label.label === 'IMPORTANT_UPDATE').length,
         marketing: labeledEmails.filter(e => e.label.label === 'MARKETING').length,
         receipts: labeledEmails.filter(e => e.label.label === 'RECEIPTS').length,
+        newsletter: labeledEmails.filter(e => e.label.label === 'NEWSLETTER').length,
+        spam: labeledEmails.filter(e => e.label.label === 'SPAM').length,
+        work: labeledEmails.filter(e => e.label.label === 'WORK').length,
+        personal: labeledEmails.filter(e => e.label.label === 'PERSONAL').length,
         other: labeledEmails.filter(e => e.label.label === 'OTHER').length
       },
       timestamp: new Date().toISOString()
