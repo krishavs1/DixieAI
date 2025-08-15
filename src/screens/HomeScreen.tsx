@@ -2218,15 +2218,25 @@ const HomeScreen = () => {
         
         // Store AI labels for each email
         const newAiLabels: {[threadId: string]: string} = {};
-        result.labeledEmails.forEach((email: any) => {
+        console.log('🔍 Matching AI labels to threads...');
+        console.log('🔍 AI processed emails:', result.labeledEmails.length);
+        console.log('🔍 Current threads:', threads.length);
+        
+        result.labeledEmails.forEach((email: any, index: number) => {
           // Find the thread ID by matching email content
           const matchingThread = threads.find(thread => 
             thread.subject === email.subject && thread.from === email.from
           );
+          
           if (matchingThread) {
             newAiLabels[matchingThread.id] = email.label.label;
+            console.log(`✅ Matched email ${index}: "${email.subject}" -> Thread ID: ${matchingThread.id}`);
+          } else {
+            console.log(`❌ No match for email ${index}: "${email.subject}" from "${email.from}"`);
           }
         });
+        
+        console.log('🔍 Final AI labels:', newAiLabels);
         setAiLabels(newAiLabels);
         
         // You can store these results or use them for instant summaries
@@ -2435,7 +2445,7 @@ const HomeScreen = () => {
               </View>
             )}
             {aiLabels[item.id] && (
-              <View style={[styles.threadLabel, { backgroundColor: getAiLabelColor(aiLabels[item.id]) }]}>
+              <View style={[styles.threadLabel, { backgroundColor: getAiLabelColor(aiLabels[item.id] || '') }]}>
                 <Text style={styles.threadLabelText}>{aiLabels[item.id]}</Text>
               </View>
             )}
