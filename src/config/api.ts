@@ -1,7 +1,99 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
+const PRODUCTION_URL = 'https://dixieai.onrender.com';
+const ENV_BACKEND_URL =
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  process.env.API_BASE_URL;
 
 // Cache for backend URL to prevent multiple network requests
 let cachedBackendURL: string | null = null;
+
+const resolveExpoHost = (): string | null => {
+  try {
+    const manifest2: any = (Constants as any)?.manifest2;
+    const manifest: any = (Constants as any)?.manifest;
+    const expoConfig: any = (Constants as any)?.expoConfig;
+    const expoGoConfig: any = (Constants as any)?.expoGoConfig;
+
+    const debuggerHost =
+      manifest2?.extra?.expoGo?.debuggerHost ||
+      manifest2?.extra?.expoGo?.hostUri ||
+      manifest?.debuggerHost ||
+      manifest?.hostUri ||
+      expoConfig?.hostUri ||
+      expoConfig?.extra?.expoGo?.hostUri ||
+      expoGoConfig?.hostUri ||
+      expoGoConfig?.debuggerHost;
+
+    if (!debuggerHost || typeof debuggerHost !== 'string') {
+      return null;
+    }
+
+    return debuggerHost.split(':')[0] || null;
+  } catch (error) {
+    console.log('⚠️ Unable to resolve Expo host automatically:', error);
+    return null;
+  }
+};
+
+const buildDevCandidateUrls = (): string[] => {
+  const candidates = new Set<string>();
+  const expoHost = resolveExpoHost();
+
+  if (expoHost) {
+    candidates.add(`http://${expoHost}:3000`);
+  }
+
+  candidates.add('http://localhost:3000');
+  candidates.add('http://127.0.0.1:3000');
+
+  if (Platform.OS === 'android') {
+    candidates.add('http://10.0.2.2:3000'); // Android emulator alias for localhost
+    candidates.add('http://10.0.3.2:3000'); // Genymotion alias
+  }
+
+  // Some previously used LAN IPs that might still be valid
+  candidates.add('http://192.168.1.195:3000');
+  candidates.add('http://192.168.1.209:3000');
+  candidates.add('http://172.20.214.39:3000');
+
+  // Allow override via env var
+  if (ENV_BACKEND_URL && ENV_BACKEND_URL.startsWith('http')) {
+    try {
+      const url = new URL(ENV_BACKEND_URL);
+      if (url.port) {
+        candidates.add(`${url.protocol}//${url.hostname}:${url.port}`);
+      } else {
+        candidates.add(`${url.protocol}//${url.hostname}:3000`);
+      }
+    } catch {
+      // ignore malformed env override
+    }
+  }
+
+  return Array.from(candidates);
+};
+
+const testBackendUrl = async (url: string, timeoutMs = 3000): Promise<boolean> => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    const response = await fetch(`${url}/health`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    return response.ok;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.log(`❌ Backend failed at: ${url} - ${message}`);
+    return false;
+  }
+};
 
 // Simplified backend URL resolver with better error handling
 export const getBackendURL = async (): Promise<string> => {
@@ -9,52 +101,34 @@ export const getBackendURL = async (): Promise<string> => {
   if (cachedBackendURL) {
     return cachedBackendURL;
   }
-  // Temporarily force production URL for testing
-  return 'https://dixieai.onrender.com';
-  
-  if (!__DEV__) {
-    return 'https://dixieai.onrender.com';
+
+  // Explicit override via environment variable wins
+  if (ENV_BACKEND_URL) {
+    cachedBackendURL = ENV_BACKEND_URL;
+    console.log(`🔧 Using backend URL from environment: ${ENV_BACKEND_URL}`);
+    return cachedBackendURL;
   }
 
-  const port = 3000;
-  
-  // For physical device, try the most likely IPs
-  const possibleURLs = [
-    'http://192.168.1.209:3000',  // Your current WiFi IP
-    'http://172.20.214.39:3000',  // Previous WiFi IP
-    'http://localhost:3000',      // Local fallback
-  ];
-  
-  // Test each URL with better error handling
-  for (const url of possibleURLs) {
-    try {
-      console.log(`Testing backend at: ${url}`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced timeout to 3 seconds
-      
-      const response = await fetch(`${url}/health`, {
-        method: 'GET',
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        console.log(`✅ Backend found at: ${url}`);
-        cachedBackendURL = url; // Cache the successful URL
-        return url;
-      }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.log(`❌ Backend failed at: ${url} - ${errorMessage}`);
-      // Don't throw, just continue to next URL
+  if (!__DEV__) {
+    cachedBackendURL = PRODUCTION_URL;
+    return PRODUCTION_URL;
+  }
+
+  const candidateUrls = buildDevCandidateUrls();
+
+  for (const url of candidateUrls) {
+    console.log(`Testing backend at: ${url}`);
+    const isReachable = await testBackendUrl(url);
+    if (isReachable) {
+      console.log(`✅ Backend found at: ${url}`);
+      cachedBackendURL = url;
+      return url;
     }
   }
-  
-  // If all fail, return the most likely one without crashing
-  console.log(`⚠️ No backend found, using fallback URL: ${possibleURLs[0]}`);
-  cachedBackendURL = possibleURLs[0]; // Cache the fallback URL
-  return possibleURLs[0];
+
+  console.log('⚠️ No local backend found, falling back to production URL');
+  cachedBackendURL = PRODUCTION_URL;
+  return PRODUCTION_URL;
 };
 
 // Function to clear the cache (useful when network changes)

@@ -163,11 +163,19 @@ const getBaseURL = async (): Promise<string> => {
 };
 
 export const emailService = {
-  async fetchThreads(token: string): Promise<EmailThread[]> {
+  async fetchThreads(token: string, pageToken?: string): Promise<{
+    threads: EmailThread[];
+    nextPageToken?: string;
+    hasMore: boolean;
+  }> {
     try {
       const baseURL = await getBaseURL();
+      const url = pageToken 
+        ? `${baseURL}/api/email/threads?pageToken=${encodeURIComponent(pageToken)}`
+        : `${baseURL}/api/email/threads`;
+        
       const response = await retryFetch(() =>
-        fetchWithTimeout(`${baseURL}/api/email/threads`, {
+        fetchWithTimeout(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -184,7 +192,11 @@ export const emailService = {
       }
 
       const data = await response.json();
-      return data.threads || [];
+      return {
+        threads: data.threads || [],
+        nextPageToken: data.nextPageToken,
+        hasMore: data.hasMore || false
+      };
     } catch (error) {
       console.error('Error fetching threads:', error);
       throw error;

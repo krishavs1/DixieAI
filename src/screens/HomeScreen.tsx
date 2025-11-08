@@ -35,7 +35,10 @@ const HomeScreen = () => {
   const [originalThreads, setOriginalThreads] = useState<EmailThread[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSlow, setIsLoadingSlow] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nextPageToken, setNextPageToken] = useState<string | undefined>();
+  const [hasMoreThreads, setHasMoreThreads] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentCategory, setCurrentCategory] = useState<EmailCategory>('primary');
   const [labels, setLabels] = useState<EmailLabel[]>(SYSTEM_LABELS);
@@ -206,12 +209,18 @@ const HomeScreen = () => {
     }
   }, [originalThreads, currentCategory, selectedLabels, searchQuery]);
 
-  const fetchThreads = async () => {
+  const fetchThreads = async (loadMore: boolean = false) => {
     if (!token) return;
     
-    setIsLoading(true);
-    setIsLoadingSlow(false);
-    setError(null);
+    if (loadMore) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+      setIsLoadingSlow(false);
+      setError(null);
+      setNextPageToken(undefined);
+      setHasMoreThreads(true);
+    }
     
     // Show "slow loading" message after 5 seconds
     const slowLoadingTimer = setTimeout(() => {
@@ -219,16 +228,27 @@ const HomeScreen = () => {
     }, 5000);
     
     try {
-      const [fetchedThreads, fetchedLabels] = await Promise.all([
-        emailService.fetchThreads(token),
-        emailService.fetchLabels(token)
+      const [threadsResult, fetchedLabels] = await Promise.all([
+        emailService.fetchThreads(token, loadMore ? nextPageToken : undefined),
+        loadMore ? Promise.resolve(labels) : emailService.fetchLabels(token)
       ]);
       
-      setOriginalThreads(fetchedThreads);
-      setLabels(fetchedLabels);
+      if (loadMore) {
+        // Append new threads to existing ones
+        setOriginalThreads(prev => [...prev, ...threadsResult.threads]);
+        setNextPageToken(threadsResult.nextPageToken);
+        setHasMoreThreads(threadsResult.hasMore);
+      } else {
+        // Replace all threads
+        setOriginalThreads(threadsResult.threads);
+        setNextPageToken(threadsResult.nextPageToken);
+        setHasMoreThreads(threadsResult.hasMore);
+        setLabels(fetchedLabels);
+      }
       
       // Apply current categorization and filtering
-      applyFiltersAndCategorization(fetchedThreads);
+      const allThreads = loadMore ? [...originalThreads, ...threadsResult.threads] : threadsResult.threads;
+      applyFiltersAndCategorization(allThreads);
     } catch (err: any) {
       let errorMessage = err.message || 'Failed to fetch emails';
       
@@ -266,7 +286,14 @@ const HomeScreen = () => {
     } finally {
       clearTimeout(slowLoadingTimer);
       setIsLoading(false);
+      setIsLoadingMore(false);
       setIsLoadingSlow(false);
+    }
+  };
+
+  const loadMoreThreads = () => {
+    if (!isLoadingMore && hasMoreThreads && nextPageToken) {
+      fetchThreads(true);
     }
   };
 
@@ -2545,12 +2572,22 @@ const HomeScreen = () => {
         data={threads}
         renderItem={renderThread}
         keyExtractor={(item) => item.id}
-            ListEmptyComponent={!isLoading ? renderEmpty : null}
-            refreshControl={
-              <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} />
-            }
-            contentContainerStyle={threads.length === 0 ? styles.emptyListContainer : undefined}
+        ListEmptyComponent={!isLoading ? renderEmpty : null}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} />
+        }
+        contentContainerStyle={threads.length === 0 ? styles.emptyListContainer : undefined}
         showsVerticalScrollIndicator={false}
+        onEndReached={loadMoreThreads}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          isLoadingMore ? (
+            <View style={styles.loadingMoreContainer}>
+              <ActivityIndicator size="small" color="#4285F4" />
+              <Text style={styles.loadingMoreText}>Loading more emails...</Text>
+            </View>
+          ) : null
+        }
       />
         )}
       </View>
@@ -3651,6 +3688,17 @@ const styles = StyleSheet.create({
   },
   voiceAgentContentContainer: {
     paddingBottom: 10,
+  },
+  loadingMoreContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 10,
+  },
+  loadingMoreText: {
+    fontSize: 14,
+    color: '#666',
   },
 });
 

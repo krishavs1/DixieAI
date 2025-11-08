@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { API_CONFIG } from '../config/api';
 import { useAuthStore } from '../store/authStore';
 
@@ -7,20 +7,24 @@ class ApiService {
 
   constructor() {
     this.client = axios.create({
-      baseURL: 'http://192.168.1.209:3000', // Use the current IP directly
       timeout: API_CONFIG.TIMEOUT,
       headers: {
         'Content-Type': 'application/json',
       },
     });
 
-    // Add request interceptor to include auth token
+    // Add request interceptor to inject base URL and auth token
     this.client.interceptors.request.use(
-      (config) => {
+      async (config) => {
+        const resolvedBaseURL = await API_CONFIG.BASE_URL;
+        config.baseURL = resolvedBaseURL;
+
         const token = useAuthStore.getState().jwtToken;
         if (token) {
+          config.headers = config.headers ?? {};
           config.headers.Authorization = `Bearer ${token}`;
         }
+
         return config;
       },
       (error) => Promise.reject(error)

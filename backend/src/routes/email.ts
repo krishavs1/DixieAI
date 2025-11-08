@@ -243,8 +243,9 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     
     const response = await gmail.users.threads.list({
       userId: 'me',
-      maxResults: 50, // Increased to 50 threads
+      maxResults: 20, // Reduced to 20 threads per page for better performance
       q: req.query.q as string || '',
+      pageToken: req.query.pageToken as string || undefined,
     });
 
     const threads = response.data.threads || [];
@@ -254,7 +255,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
       threads.map(async (thread, index) => { // Process all 8 threads
         // Add delay between requests to avoid overwhelming Gmail API
         if (index > 0) {
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Much longer delay
+          await new Promise(resolve => setTimeout(resolve, 500)); // Reduced delay for better performance
         }
         
         // Extract display name from "Display Name <email@domain.com>" format
@@ -335,7 +336,11 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
       .filter(result => result.status === 'fulfilled')
       .map(result => (result as PromiseFulfilledResult<any>).value);
 
-    return res.json({ threads: successfulThreads });
+    return res.json({ 
+      threads: successfulThreads,
+      nextPageToken: response.data.nextPageToken,
+      hasMore: !!response.data.nextPageToken
+    });
   } catch (error) {
     logger.error('Error fetching threads:', error);
     return res.status(500).json({ error: 'Failed to fetch emails' });
