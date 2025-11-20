@@ -1322,6 +1322,10 @@ const HomeScreen = () => {
     // Restart background listening after closing voice agent
     setTimeout(() => {
       console.log('🎧 Restarting background listening after voice agent closed...');
+      // Allow wake word detection again
+      speechKillSwitchRef.current = false;
+      setSpeechKillSwitch(false);
+      globalCancellationFlagRef.current = false;
       startBackgroundListening();
     }, 1500); // Increased delay to ensure voice agent is fully closed
     

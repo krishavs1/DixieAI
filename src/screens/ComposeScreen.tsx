@@ -115,7 +115,7 @@ const ComposeScreen = ({ route }: any) => {
   const processVoiceCommand = async (text: string) => {
     const lowerText = text.toLowerCase();
     
-    // Voice agent commands
+   
     if (lowerText.includes('summarize') && lowerText.includes('inbox')) {
       await summarizeInbox();
     } else if (lowerText.includes('close') || lowerText.includes('exit')) {

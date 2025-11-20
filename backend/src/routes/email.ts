@@ -243,7 +243,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     
     const response = await gmail.users.threads.list({
       userId: 'me',
-      maxResults: 20, // Reduced to 20 threads per page for better performance
+      maxResults: 20, // Smaller page size for classification testing
       q: req.query.q as string || '',
       pageToken: req.query.pageToken as string || undefined,
     });

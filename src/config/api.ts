@@ -90,7 +90,7 @@ const testBackendUrl = async (url: string, timeoutMs = 3000): Promise<boolean> =
     return response.ok;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.log(`❌ Backend failed at: ${url} - ${message}`);
+    console.log(`Backend failed at: ${url} - ${message}`);
     return false;
   }
 };
@@ -157,7 +157,7 @@ export const API_CONFIG = {
       SEND: '/api/email/send',
     },
   },
-  TIMEOUT: 60000, // 60 seconds - increased for AI classification of 50 emails
+  TIMEOUT: 60000,
 };
 
 export const GOOGLE_CONFIG = {
