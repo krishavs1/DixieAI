@@ -817,7 +817,6 @@ const HomeScreen = () => {
           
           // Reset command processed flag so new commands can be processed
           commandProcessedRef.current = false;
-          console.log('🔄 Reset commandProcessedRef to false - ready for next command');
           
           // Reset global cancellation flag
           globalCancellationFlagRef.current = false;
@@ -850,7 +849,6 @@ const HomeScreen = () => {
         }
       }, 100);
       
-      console.log('=== END PROCESSING VOICE COMMAND ===');
     } catch (error) {
       console.error('❌ CRITICAL ERROR in processVoiceCommand:', error);
       // Reset all flags on critical error and transition back to ACTIVE_LISTENING
@@ -861,8 +859,6 @@ const HomeScreen = () => {
 
   // Helper function to speak responses using ElevenLabs
   const speakResponse = async (text: string) => {
-      console.log('🎤 SPEAK RESPONSE CALLED - Text:', text.substring(0, 50) + '...');
-      console.log('🎤 Current agentState:', agentState);
       speechKillSwitchRef.current = false; // Reset kill switch
       
       // Transition to TTS_PLAYING state
@@ -888,7 +884,6 @@ const HomeScreen = () => {
         try {
           await elevenLabsTTS.speak(conversationalText, {
             onDone: () => {
-              console.log('🎤 SPEECH DONE — transitioning to ACTIVE_LISTENING');
               // Transition back to ACTIVE_LISTENING when TTS completes
               setAgentState('ACTIVE_LISTENING');
             
@@ -898,7 +893,6 @@ const HomeScreen = () => {
               // 2) Schedule auto‑stop after 10 s if nobody talks:
               if (followUpTimerRef.current) clearTimeout(followUpTimerRef.current);
               followUpTimerRef.current = setTimeout(() => {
-                console.log('⏲️ Follow‑up window expired — stopping listening');
                 stopListening();
                 followUpTimerRef.current = null;
               }, 10_000);
@@ -909,7 +903,6 @@ const HomeScreen = () => {
               setAgentState('ACTIVE_LISTENING');
             },
             onStart: () => {
-              console.log('🎤 SPEECH STARTED SUCCESSFULLY');
               // Check kill switch and global cancellation right after speech starts - CHECK REF FIRST
               if (speechKillSwitchRef.current || globalCancellationFlagRef.current) {
                 elevenLabsTTS.stop();
@@ -945,7 +938,6 @@ const HomeScreen = () => {
       
       console.log('📞 Calling emailService.generateInboxSummary...');
       const summary = await emailService.generateInboxSummary(token, globalCancellationFlagRef);
-      console.log('✅ Summary generated successfully:', summary);
       
       // Check if cancelled before proceeding
       if (globalCancellationFlagRef.current) {
@@ -972,7 +964,6 @@ const HomeScreen = () => {
       }
       
       await speakResponse(displaySummary);
-      console.log('✅ Summarize command completed successfully');
     } catch (error) {
       // Check if cancelled before showing error
       if (globalCancellationFlagRef.current) {
@@ -1013,11 +1004,6 @@ const HomeScreen = () => {
       setCurrentSender(senderName);
       currentThreadRef.current = thread;
       currentSenderRef.current = senderName;
-      console.log('✅ Stored thread context for replies:', {
-        threadId: thread.id,
-        senderName: senderName,
-        subject: thread.latestMessage.subject
-      });
       
       // Convert HTML email content to clean text using AI
       const cleanBody = await emailService.convertHtmlToText(thread.latestMessage.body, token, thread.latestMessage.subject);
@@ -1026,7 +1012,6 @@ const HomeScreen = () => {
       setAgentResponse(emailContent);
       await speakResponse(emailContent);
       
-      console.log('✅ Read email command completed successfully');
          } catch (error) {
        console.error('❌ Error reading email:', error);
        const errorMsg = (error as Error).message || "Sorry, I couldn't find an email from that person. Try being more specific.";
@@ -1085,7 +1070,6 @@ const HomeScreen = () => {
       setAgentResponse(`Here's your reply:\n\n${replyData.reply}`);
       await speakResponse(`Here's your reply: ${replyData.reply}`);
       
-      console.log('✅ Write reply command completed successfully');
          } catch (error) {
        console.error('❌ Error generating reply:', error);
        const errorMsg = (error as Error).message || "Sorry, I had trouble generating that reply. Please try again.";
@@ -1129,7 +1113,6 @@ const HomeScreen = () => {
       setAgentResponse(editMessage);
       await speakResponse(`Here's your reply: ${replyDraft}. Do you have any edits?`);
       
-      console.log('✅ Auto-reply draft generated, awaiting confirmation');
     } catch (error) {
       console.error('❌ Error generating auto-reply:', error);
       const fallbackReply = "I'm having trouble generating a reply right now. Please try again in a moment.";
@@ -1140,10 +1123,6 @@ const HomeScreen = () => {
 
   // Handle confirmed send
   const handleSendConfirmedReply = async () => {
-    console.log('🚀 SENDING CONFIRMED REPLY - Starting...');
-    console.log('🔍 Pending reply:', pendingReply);
-    console.log('🔍 Pending reply ref:', pendingReplyRef.current);
-    console.log('🔍 Thread to use:', currentThread || currentThreadRef.current);
     
     setAgentResponse('Sending your reply...');
     
@@ -1156,8 +1135,6 @@ const HomeScreen = () => {
         throw new Error('No reply content available');
       }
       
-      console.log('🔍 Sending reply to thread:', threadToUse.id);
-      console.log('🔍 Reply content length:', replyToSend.length);
       await emailService.sendReply(threadToUse.id, replyToSend, token);
       
       // Reset states
@@ -1178,7 +1155,6 @@ const HomeScreen = () => {
       setAgentResponse(successMsg);
       await speakResponse(successMsg);
       
-      console.log('✅ Auto-reply sent successfully');
     } catch (error) {
       console.error('❌ Error sending reply:', error);
       const errorMsg = "Sorry, I had trouble sending that reply. Please try again.";
@@ -1279,7 +1255,6 @@ const HomeScreen = () => {
     setAgentResponse(cancelMsg);
     await speakResponse(cancelMsg);
     
-    console.log('✅ Auto-reply cancelled by user');
   };
 
   const handleVoiceInputSubmit = () => {
@@ -1770,12 +1745,9 @@ const HomeScreen = () => {
       
       clearTimeout(timeoutId);
       
-      console.log('🔍 Response status:', response.status);
-      console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.log('🔍 Error response body:', errorText);
         throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
@@ -1793,9 +1765,6 @@ const HomeScreen = () => {
         
         // Store AI labels for each email
         const newAiLabels: {[threadId: string]: string} = {};
-        console.log('🔍 Matching AI labels to threads...');
-        console.log('🔍 AI processed emails:', result.labeledEmails.length);
-        console.log('🔍 Current threads:', threads.length);
         
         result.labeledEmails.forEach((email: any, index: number) => {
           // Find the thread ID by matching email content
@@ -1811,7 +1780,6 @@ const HomeScreen = () => {
           }
         });
         
-        console.log('🔍 Final AI labels:', newAiLabels);
         setAiLabels(newAiLabels);
         
         // You can store these results or use them for instant summaries
