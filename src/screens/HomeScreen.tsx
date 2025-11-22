@@ -1004,7 +1004,6 @@ const HomeScreen = () => {
         return;
       }
       
-      console.log(`🔍 Looking for email from: ${senderName}`);
       
       // Find the thread from this sender
       const thread = await emailService.findThreadBySender(senderName, token);
@@ -1019,10 +1018,6 @@ const HomeScreen = () => {
         senderName: senderName,
         subject: thread.latestMessage.subject
       });
-      console.log('✅ Set currentThread state to:', thread);
-      console.log('✅ Set currentSender state to:', senderName);
-      console.log('✅ Set currentThreadRef to:', thread);
-      console.log('✅ Set currentSenderRef to:', senderName);
       
       // Convert HTML email content to clean text using AI
       const cleanBody = await emailService.convertHtmlToText(thread.latestMessage.body, token, thread.latestMessage.subject);
@@ -1103,14 +1098,6 @@ const HomeScreen = () => {
   const handleWriteAutoReplyCommand = async () => {
     setAgentResponse('Generating a reply...');
     
-    console.log('🔍 Auto-reply command triggered');
-    console.log('🔍 Current thread state:', currentThread);
-    console.log('🔍 Current sender state:', currentSender);
-    console.log('🔍 Current thread ref:', currentThreadRef.current);
-    console.log('🔍 Current sender ref:', currentSenderRef.current);
-    console.log('🔍 Current thread ID:', currentThread?.id || currentThreadRef.current?.id);
-    console.log('🔍 Current thread subject:', currentThread?.latestMessage?.subject || currentThreadRef.current?.latestMessage?.subject);
-    console.log('🔍 Current thread from:', currentThread?.latestMessage?.from || currentThreadRef.current?.latestMessage?.from);
     
     try {
       // Check if we have a current thread to reply to (try state first, then ref)
@@ -1123,7 +1110,6 @@ const HomeScreen = () => {
         return;
       }
       
-      console.log(`🔍 Auto-generating reply for thread: ${threadToUse.id}`);
       
       // Generate a contextual reply using AI
       const replyDraft = await emailService.generateContextualReply(threadToUse.id, token);
