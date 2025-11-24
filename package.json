@@ -30,6 +30,7 @@
     "date-fns": "^3.2.0",
     "dayjs": "^1.11.13",
     "expo": "53.0.20",
+    "expo-asset": "^12.0.10",
     "expo-auth-session": "~6.2.1",
     "expo-av": "~15.1.7",
     "expo-clipboard": "~7.1.5",

@@ -51,7 +51,7 @@ const HomeScreen = () => {
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [summaryText, setSummaryText] = useState('');
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
-  const [aiLabels, setAiLabels] = useState<{[threadId: string]: string}>({});
+  const [aiLabels, setAiLabels] = useState<{ [threadId: string]: string }>({});
 
   // Main agent state machine - single source of truth for mode
   const [agentState, setAgentState] = useState<AgentState>('WAKE_LISTENING');
@@ -69,59 +69,59 @@ const HomeScreen = () => {
   const [voiceInput, setVoiceInput] = useState('');
   const [listeningAnimation, setListeningAnimation] = useState(false);
   const [silenceTimeout, setSilenceTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
-  
+
   // Speech kill switch (ref only - internal flag, not for UI)
   const speechKillSwitchRef = useRef(false);
-  
+
   // Animation refs
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useState(new Animated.Value(-300))[0];
-  
+
   // Final recognized text storage
   const finalRecognizedTextRef = useRef<string>('');
-  
+
   // State for read & reply functionality
   const [currentThread, setCurrentThread] = useState<any>(null);
   const [currentSender, setCurrentSender] = useState<string>('');
-  
+
   // State for auto-reply confirmation flow
   const [pendingReply, setPendingReply] = useState<string>('');
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
-  
+
   // State for edit mode flow
   const [isEditMode, setIsEditMode] = useState(false);
   const [editHistory, setEditHistory] = useState<string[]>([]);
   const [originalReply, setOriginalReply] = useState<string>('');
-  
+
   // Refs to persist thread context across voice agent sessions
   const currentThreadRef = useRef<any>(null);
   const currentSenderRef = useRef<string>('');
-  
+
   // Wake word cooldown to prevent double-triggering (simple timestamp-based guard)
   const wakeWordCooldownRef = useRef<number>(0);
   const WAKE_WORD_COOLDOWN_MS = 2000; // 2 second cooldown
-  
+
   // Command processing control
   const commandProcessedRef = useRef(false);
 
-  
+
   // Global cancellation flag - when true, all processing should stop immediately
   const globalCancellationFlagRef = useRef(false);
-  
+
   // Prevent multiple simultaneous wake word detection calls
   const wakeWordDetectionInProgressRef = useRef(false);
-  
+
   // Ref to track confirmation state more reliably (prevents state loss during re-renders)
   const awaitingConfirmationRef = useRef(false);
-  
+
   // Ref to track pending reply more reliably (prevents state loss during re-renders)
   const pendingReplyRef = useRef('');
-  
+
   // Refs for edit mode state (prevents state loss during re-renders)
   const isEditModeRef = useRef(false);
   const editHistoryRef = useRef<string[]>([]);
   const originalReplyRef = useRef('');
-  
+
   // Timer that lasts 10 seconds after speech completes to detect further speech
   const followUpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -153,7 +153,7 @@ const HomeScreen = () => {
   // Apply filters and categorization to threads
   const applyFiltersAndCategorization = (threadsToProcess: EmailThread[]) => {
     console.log('Applying filters and categorization to', threadsToProcess.length, 'threads');
-    
+
     // Apply categorization
     const categorizedThreads = threadsToProcess.map(thread => {
       const category = emailService.categorizeEmail(thread);
@@ -164,31 +164,31 @@ const HomeScreen = () => {
     });
 
     // Filter by current category
-    const categoryFiltered = currentCategory === 'all' 
-      ? categorizedThreads 
-      : categorizedThreads.filter(thread => 
-          thread.category === currentCategory
-        );
+    const categoryFiltered = currentCategory === 'all'
+      ? categorizedThreads
+      : categorizedThreads.filter(thread =>
+        thread.category === currentCategory
+      );
 
     // Apply label filters
-    const labelFiltered = selectedLabels.length > 0 
-      ? categoryFiltered.filter(thread => 
-          thread.labels && selectedLabels.some(labelId => thread.labels!.includes(labelId))
-        )
+    const labelFiltered = selectedLabels.length > 0
+      ? categoryFiltered.filter(thread =>
+        thread.labels && selectedLabels.some(labelId => thread.labels!.includes(labelId))
+      )
       : categoryFiltered;
 
     // Apply search filter
-    const searchFiltered = searchQuery.trim() 
-      ? labelFiltered.filter(thread => 
-          thread.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          thread.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          thread.snippet.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+    const searchFiltered = searchQuery.trim()
+      ? labelFiltered.filter(thread =>
+        thread.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        thread.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        thread.snippet.toLowerCase().includes(searchQuery.toLowerCase())
+      )
       : labelFiltered;
 
     // Sort by date (newest first)
     const sortedThreads = emailService.sortThreads(searchFiltered);
-    
+
     console.log(`Filtered to ${sortedThreads.length} threads in category: ${currentCategory}`);
     setThreads(sortedThreads);
   };
@@ -200,7 +200,7 @@ const HomeScreen = () => {
       fetchThreads(false); // Always do a fresh fetch (not loadMore) when category/token changes
     }
   }, [token, currentCategory]);
-  
+
   // Re-apply filters and categorization when threads or filters change
   useEffect(() => {
     if (originalThreads.length > 0) {
@@ -210,7 +210,7 @@ const HomeScreen = () => {
 
   const fetchThreads = async (loadMore: boolean = false) => {
     if (!token) return;
-    
+
     if (loadMore) {
       setIsLoadingMore(true);
     } else {
@@ -220,20 +220,20 @@ const HomeScreen = () => {
       setNextPageToken(undefined);
       setHasMoreThreads(true);
     }
-    
+
     // Show "slow loading" message after 5 seconds
     const slowLoadingTimer = setTimeout(() => {
       setIsLoadingSlow(true);
     }, 5000);
-    
+
     try {
       const [threadsResult, fetchedLabels] = await Promise.all([
         emailService.fetchThreads(token, loadMore ? nextPageToken : undefined, currentCategory),
         loadMore ? Promise.resolve(labels) : emailService.fetchLabels(token)
       ]);
-      
+
       let allThreads: EmailThread[];
-      
+
       if (loadMore) {
         // Append new threads to existing ones, deduplicating by ID
         const existingIds = new Set(originalThreads.map(t => t.id));
@@ -254,12 +254,12 @@ const HomeScreen = () => {
         setHasMoreThreads(threadsResult.hasMore);
         setLabels(fetchedLabels);
       }
-      
+
       // Apply current categorization and filtering
       applyFiltersAndCategorization(allThreads);
     } catch (err: any) {
       let errorMessage = err.message || 'Failed to fetch emails';
-      
+
       // Provide more user-friendly error messages
       if (errorMessage.includes('Request timed out') || errorMessage.includes('Network request timed out')) {
         errorMessage = 'Request timed out. Please check your internet connection and try again.';
@@ -268,10 +268,10 @@ const HomeScreen = () => {
       } else if (errorMessage.includes('Authentication failed') || errorMessage.includes('Please log in again')) {
         errorMessage = 'Your session has expired. Please log in again.';
       }
-      
+
       setError(errorMessage);
       console.error('Error fetching threads:', err);
-      
+
       // Check if it's an authentication error
       if (errorMessage.includes('session has expired')) {
         showMessage({
@@ -307,16 +307,16 @@ const HomeScreen = () => {
 
   const handleThreadPress = async (thread: EmailThread) => {
     console.log(`Opening thread ${thread.id}: read=${thread.read}, subject="${thread.subject}"`);
-    
+
     // Mark as read if it's currently unread
     if (thread.read === false && token) {
       try {
         await emailService.markAsRead(token, thread.id);
         console.log(`Successfully marked thread ${thread.id} as read`);
-        
+
         // Update local state immediately for better UX
         setOriginalThreads(prev => {
-          const updated = prev.map(t => 
+          const updated = prev.map(t =>
             t.id === thread.id ? { ...t, read: true } : t
           );
           console.log(`Updated thread ${thread.id} in local state: read=${updated.find(t => t.id === thread.id)?.read}`);
@@ -327,7 +327,7 @@ const HomeScreen = () => {
         // Continue to navigate even if marking as read fails
       }
     }
-    
+
     (navigation as any).navigate('EmailDetail', { threadId: thread.id, thread });
   };
 
@@ -336,20 +336,20 @@ const HomeScreen = () => {
   // Code below to debug emails by copying HTML to clipboard and then seeing how it renders
   const handleDebugEmail = async (thread: EmailThread) => {
     if (!token) return;
-    
+
     try {
       // Fetch the full email content
       const emailContent = await emailService.fetchEmailContent(token, thread.id);
-      
+
       // Copy to clipboard
       await Clipboard.setStringAsync(emailContent);
-      
+
       showMessage({
         message: '📋 Email HTML copied to clipboard!',
         type: 'success',
         duration: 2000,
       });
-      
+
       console.log('Email HTML copied:', emailContent.substring(0, 200) + '...');
     } catch (error) {
       console.error('Error fetching email content:', error);
@@ -375,8 +375,8 @@ const HomeScreen = () => {
   };
 
   const handleLabelToggle = (labelId: string) => {
-    setSelectedLabels(prev => 
-      prev.includes(labelId) 
+    setSelectedLabels(prev =>
+      prev.includes(labelId)
         ? prev.filter(id => id !== labelId)
         : [...prev, labelId]
     );
@@ -415,10 +415,10 @@ const HomeScreen = () => {
   const getCategoryInfo = (): EmailCategoryInfo[] => {
     const categories: EmailCategory[] = ['primary', 'social', 'promotions', 'updates', 'sent'];
     return categories.map(category => {
-      const count = originalThreads.filter(thread => 
+      const count = originalThreads.filter(thread =>
         emailService.categorizeEmail(thread) === category
       ).length;
-      
+
       const categoryData = {
         all: { name: 'All', color: '#4285F4', icon: 'mail' },
         primary: { name: 'Primary', color: '#4285F4', icon: 'mail' },
@@ -427,7 +427,7 @@ const HomeScreen = () => {
         updates: { name: 'Updates', color: '#EA4335', icon: 'notifications' },
         sent: { name: 'Sent', color: '#34A853', icon: 'send' }
       };
-      
+
       return {
         id: category,
         name: categoryData[category].name,
@@ -441,14 +441,14 @@ const HomeScreen = () => {
   const handleVoiceCommand = () => {
     console.log('🎤 MIC BUTTON PRESSED - Opening voice agent...');
     console.log('Current agentState:', agentState);
-    
+
     // If TTS is speaking, interrupt it immediately (same as wake word)
     if (agentState === 'TTS_PLAYING') {
       console.log('🛑 Interrupting TTS for mic button click');
       elevenLabsTTS.stop();
       setAgentState('ACTIVE_LISTENING');
     }
-    
+
     // If currently processing, interrupt it (same as wake word)
     if (agentState === 'PROCESSING') {
       console.log('🛑 Interrupting command processing for mic button click');
@@ -456,12 +456,12 @@ const HomeScreen = () => {
       commandProcessedRef.current = false; // Reset command processed flag
       setAgentState('ACTIVE_LISTENING');
     }
-    
+
     // Stop wake word detection if active, then transition to active listening
     if (agentState === 'WAKE_LISTENING') {
       stopWakeWordDetection();
     }
-    
+
     // Transition to active listening state
     try {
       setAgentState('ACTIVE_LISTENING');
@@ -482,24 +482,24 @@ const HomeScreen = () => {
     if (agentState !== 'WAKE_LISTENING') {
       return;
     }
-    
+
     // Prevent multiple simultaneous calls
     if (wakeWordDetectionInProgressRef.current) {
       return;
     }
-    
+
     // Set flag to prevent multiple calls
     wakeWordDetectionInProgressRef.current = true;
-    
+
     // Add a small delay to prevent rapid successive calls
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     // Double-check state after delay
     if (agentState !== 'WAKE_LISTENING') {
       wakeWordDetectionInProgressRef.current = false;
       return;
     }
-    
+
     try {
       // Stop any existing recognition first
       try {
@@ -507,16 +507,16 @@ const HomeScreen = () => {
       } catch (stopError) {
         // Ignore stop errors
       }
-      
+
       // Add a small delay before starting new recognition
       await new Promise(resolve => setTimeout(resolve, 0));
-      
+
       await Voice.start('en-US');
     } catch (error) {
       // If it's an "already started" error, try to recover
-      if (error && typeof error === 'object' && 'error' in error && 
-          error.error && typeof error.error === 'object' && 'message' in error.error &&
-          typeof error.error.message === 'string' && error.error.message.includes('already started')) {
+      if (error && typeof error === 'object' && 'error' in error &&
+        error.error && typeof error.error === 'object' && 'message' in error.error &&
+        typeof error.error.message === 'string' && error.error.message.includes('already started')) {
         try {
           await Voice.stop();
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -538,9 +538,9 @@ const HomeScreen = () => {
   // we're in the correct state before calling, or set agentState first.
   const stopWakeWordDetection = async () => {
     if (agentState !== 'WAKE_LISTENING') return;
-    
+
     wakeWordDetectionInProgressRef.current = false;
-    
+
     try {
       await Voice.stop();
     } catch (error) {
@@ -552,19 +552,19 @@ const HomeScreen = () => {
   // Returns true if wake word was detected and handled, false otherwise
   const handleWakeWord = (text: string): boolean => {
     const lowerText = text.toLowerCase();
-    
+
     // Check for wake word variants
     if (!lowerText.includes('dixie') && !lowerText.includes('dixey') && !lowerText.includes('taxi')) {
       return false;
     }
-    
+
     // Cooldown check to prevent double-triggering
     const now = Date.now();
     if (now - wakeWordCooldownRef.current < WAKE_WORD_COOLDOWN_MS) {
       return false; // Still in cooldown, ignore
     }
     wakeWordCooldownRef.current = now;
-    
+
     // Handle wake word based on current state
     if (agentState === 'WAKE_LISTENING') {
       // Stop wake-word-only listening and transition to active listening
@@ -574,59 +574,59 @@ const HomeScreen = () => {
       speechKillSwitchRef.current = false;
       globalCancellationFlagRef.current = false;
       commandProcessedRef.current = false;
-      
+
       // Start full command listening after a brief delay
       setTimeout(() => {
         startListening();
       }, 500);
-      
+
       return true;
     }
-    
+
     if (agentState === 'TTS_PLAYING') {
       // Stop TTS and move to active listening
       elevenLabsTTS.stop();
       setAgentState('ACTIVE_LISTENING');
       speechKillSwitchRef.current = false;
       globalCancellationFlagRef.current = false;
-      
+
       // Start listening for new command
       setTimeout(() => {
         startListening();
       }, 200);
-      
+
       return true;
     }
-    
+
     if (agentState === 'PROCESSING') {
       // Set cancellation flag, stop any pending TTS, and move to active listening
       globalCancellationFlagRef.current = true;
       commandProcessedRef.current = false;
       speechKillSwitchRef.current = true;
-      
+
       // Clear transient UI messages but preserve meaningful responses
       const currentResponse = agentResponse;
-      if (!currentResponse || 
-          currentResponse === 'Processing your request...' || 
-          currentResponse === 'Generating inbox summary...' || 
-          currentResponse === 'Looking for that email...' ||
-          currentResponse === 'Ready for your next command...') {
+      if (!currentResponse ||
+        currentResponse === 'Processing your request...' ||
+        currentResponse === 'Generating inbox summary...' ||
+        currentResponse === 'Looking for that email...' ||
+        currentResponse === 'Ready for your next command...') {
         setAgentResponse('');
       }
       setVoiceText('');
-      
+
       // Transition to active listening
       setAgentState('ACTIVE_LISTENING');
-      
+
       // Start listening for new command
       setTimeout(() => {
         speechKillSwitchRef.current = false;
         startListening();
       }, 200);
-      
+
       return true;
     }
-    
+
     // If already in ACTIVE_LISTENING, just restart listening
     if (agentState === 'ACTIVE_LISTENING') {
       stopListening();
@@ -635,7 +635,7 @@ const HomeScreen = () => {
       }, 200);
       return true;
     }
-    
+
     return false;
   };
 
@@ -646,31 +646,31 @@ const HomeScreen = () => {
         commandProcessedRef.current = false;
         return;
       }
-      
+
       // Only process commands when in ACTIVE_LISTENING state
       if (agentState !== 'ACTIVE_LISTENING') {
         return;
       }
-      
+
       // Reset flags for new command
       commandProcessedRef.current = false;
       commandProcessedRef.current = true;
-      
+
       const lowerText = text.toLowerCase();
-      
+
       // Use setTimeout instead of requestAnimationFrame for better device compatibility
       setTimeout(async () => {
         try {
           // Transition to PROCESSING state
           setAgentState('PROCESSING');
-          
+
           // Stop active listening and show processing UI
           await stopListening();
-          
+
           // Clear the listening UI and show processing state
           setVoiceText('');
           setAgentResponse('Processing your request...');
-          
+
           // Start pulsing animation for processing state
           Animated.loop(
             Animated.sequence([
@@ -686,20 +686,20 @@ const HomeScreen = () => {
               }),
             ])
           ).start();
-          
+
           // Process the command
           try {
-           
+
             // Check both state and ref for confirmation
             const isAwaitingConfirmation = awaitingConfirmation || awaitingConfirmationRef.current;
             const hasPendingReply = pendingReply || pendingReplyRef.current;
-            
+
             if (isAwaitingConfirmation && (lowerText.includes('yes') || lowerText.includes('send') || lowerText.includes('okay') || lowerText.includes('ok'))) {
               console.log('✅ DETECTED YES CONFIRMATION - Sending email...');
               await handleSendConfirmedReply();
               return;
             }
-            
+
             // Fallback: If we have a pending reply but confirmation state is lost, still allow confirmation
             if (hasPendingReply && (lowerText.includes('yes') || lowerText.includes('send') || lowerText.includes('okay') || lowerText.includes('ok'))) {
               console.log('✅ DETECTED YES CONFIRMATION (fallback) - Sending email...');
@@ -708,12 +708,12 @@ const HomeScreen = () => {
               await handleSendConfirmedReply();
               return;
             }
-            
+
             // SIMPLE CONFIRMATION FLOW:
             // 1. Send it - if they say "send it", "yes", "okay", etc.
             // 2. Cancel - if they say "cancel", "no", "don't send", etc.
             // 3. Everything else - pass to LLM to regenerate the reply
-            
+
             if (isAwaitingConfirmation) {
               // Check for send confirmation
               if (lowerText.includes('send') || lowerText.includes('yes') || lowerText.includes('okay') || lowerText.includes('ok') || lowerText.includes('go ahead')) {
@@ -721,20 +721,20 @@ const HomeScreen = () => {
                 await handleSendConfirmedReply();
                 return;
               }
-              
+
               // Check for cancellation
               if (lowerText.includes('cancel') || lowerText.includes('no') || lowerText.includes('don\'t send') || lowerText.includes('stop')) {
                 console.log('✅ DETECTED CANCELLATION - Cancelling email...');
                 await handleCancelReply();
                 return;
               }
-              
+
               // Everything else - treat as edit request
               console.log('✏️ DETECTED EDIT REQUEST - Regenerating reply...');
               await handleEditRequest(text);
               return;
             }
-            
+
             // Fallback: If we have a pending reply but confirmation state is lost
             if (hasPendingReply) {
               // Check for send confirmation
@@ -745,7 +745,7 @@ const HomeScreen = () => {
                 await handleSendConfirmedReply();
                 return;
               }
-              
+
               // Check for cancellation
               if (lowerText.includes('cancel') || lowerText.includes('no') || lowerText.includes('don\'t send') || lowerText.includes('stop')) {
                 console.log('✅ DETECTED CANCELLATION (fallback) - Cancelling email...');
@@ -754,7 +754,7 @@ const HomeScreen = () => {
                 await handleCancelReply();
                 return;
               }
-              
+
               // Everything else - treat as edit request
               console.log('✏️ DETECTED EDIT REQUEST (fallback) - Regenerating reply...');
               setAwaitingConfirmation(true);
@@ -762,7 +762,7 @@ const HomeScreen = () => {
               await handleEditRequest(text);
               return;
             }
-            
+
             // EDIT MODE HANDLING - Check if we're in edit mode and handle edit requests
             const isInEditMode = isEditMode || isEditModeRef.current;
             if (isInEditMode && isAwaitingConfirmation) {
@@ -770,32 +770,32 @@ const HomeScreen = () => {
               await handleEditRequest(text);
               return;
             }
-            
+
             // 1. SUMMARIZE COMMAND
             if (lowerText.includes('summarize') || lowerText.includes('summary')) {
               console.log('✅ DETECTED SUMMARIZE COMMAND - Processing...');
               await handleSummarizeCommand();
             }
-            
+
             // 2. READ EMAIL COMMAND - "read email from [name]" or "read the email from [name]"
             else if (lowerText.includes('read') && (lowerText.includes('email from') || lowerText.includes('message from'))) {
               console.log('✅ DETECTED READ EMAIL COMMAND - Processing...');
               await handleReadEmailCommand(text);
             }
-            
+
             // 3. AUTO REPLY COMMAND - "write a reply to that email" or "reply to that email" (check this FIRST - more specific)
             else if ((lowerText.includes('write') && lowerText.includes('reply') && (lowerText.includes('that') || lowerText.includes('this'))) ||
-                     (lowerText.includes('reply') && (lowerText.includes('that') || lowerText.includes('this')) && !lowerText.includes('write'))) {
+              (lowerText.includes('reply') && (lowerText.includes('that') || lowerText.includes('this')) && !lowerText.includes('write'))) {
               console.log('✅ DETECTED AUTO REPLY COMMAND - Processing...');
               await handleWriteAutoReplyCommand();
             }
-            
+
             // 4. WRITE REPLY COMMAND - "write a reply" or "reply to [name]" (less specific, check after)
             else if (lowerText.includes('write') && (lowerText.includes('reply') || lowerText.includes('respond'))) {
               console.log('✅ DETECTED WRITE REPLY COMMAND - Processing...');
               await handleWriteReplyCommand(text);
             }
-            
+
             // 4. UNKNOWN COMMAND
             else {
               console.log('❌ No recognized command detected in:', text);
@@ -808,12 +808,12 @@ const HomeScreen = () => {
             setAgentResponse(errorMessage);
             speakResponse(errorMessage);
           }
-          
+
           // After command completes, transition back to ACTIVE_LISTENING (unless TTS was started)
           // Note: If command handlers call speakResponse, they will transition to TTS_PLAYING
           // This code runs if no TTS was started or if we need to reset after error
           console.log('Command processing complete, checking if TTS was started...');
-          
+
           // Check if we're still processing (use functional update to get current state)
           setAgentState(currentState => {
             // Only transition back if we're still in PROCESSING (meaning no TTS was started)
@@ -824,17 +824,17 @@ const HomeScreen = () => {
             // If we're already in TTS_PLAYING or another state, keep it
             return currentState;
           });
-          
+
           // Reset command processed flag so new commands can be processed
           commandProcessedRef.current = false;
-          
+
           // Reset global cancellation flag
           globalCancellationFlagRef.current = false;
-          
+
           // Stop the processing animation
           pulseAnim.stopAnimation();
           pulseAnim.setValue(1);
-          
+
           // Keep voice agent open and ready for next command
           // Only set "Ready for your next command..." if the response is still a processing message
           // This prevents overwriting actual responses like summaries, email content, etc.
@@ -842,7 +842,7 @@ const HomeScreen = () => {
           if (currentResponse === 'Processing your request...' || currentResponse === 'Generating inbox summary...' || currentResponse === 'Looking for that email...') {
             setAgentResponse('Ready for your next command...');
           }
-          
+
           // Restart active listening if we're in ACTIVE_LISTENING state
           setAgentState(currentState => {
             if (currentState === 'ACTIVE_LISTENING') {
@@ -850,7 +850,7 @@ const HomeScreen = () => {
             }
             return currentState;
           });
-          
+
         } catch (error) {
           console.error('❌ Error in processVoiceCommand:', error);
           // Reset flags on error and transition back to ACTIVE_LISTENING
@@ -858,7 +858,7 @@ const HomeScreen = () => {
           commandProcessedRef.current = false;
         }
       }, 100);
-      
+
     } catch (error) {
       console.error('❌ CRITICAL ERROR in processVoiceCommand:', error);
       // Reset all flags on critical error and transition back to ACTIVE_LISTENING
@@ -869,64 +869,64 @@ const HomeScreen = () => {
 
   // Helper function to speak responses using ElevenLabs
   const speakResponse = async (text: string) => {
-      speechKillSwitchRef.current = false; // Reset kill switch
-      
-      // Transition to TTS_PLAYING state
-      setAgentState('TTS_PLAYING');
-      
-      // Add natural speech patterns and pauses
-      const conversationalText = text
-        .replace(/\. /g, '... ') // Add pauses after periods
-        .replace(/, /g, ', ... ') // Add pauses after commas
-        .replace(/ and /g, ' ... and ') // Add pause before "and"
-        .replace(/\.$/, '...'); // Add pause at the end
-      
-     
-      
-      // Wait a moment before speaking
-      setTimeout(async () => {
-        // Check kill switch and global cancellation flag before speaking - CHECK REF FIRST
-        if (speechKillSwitchRef.current || globalCancellationFlagRef.current) {
-          setAgentState('ACTIVE_LISTENING');
-          return;
-        }
-        
-        try {
-          await elevenLabsTTS.speak(conversationalText, {
-            onDone: () => {
-              // Transition back to ACTIVE_LISTENING when TTS completes
-              setAgentState('ACTIVE_LISTENING');
-            
-              // 1) Start active listening so user can speak right away:
-              startListening();
-            
-              // 2) Schedule auto‑stop after 10 s if nobody talks:
-              if (followUpTimerRef.current) clearTimeout(followUpTimerRef.current);
-              followUpTimerRef.current = setTimeout(() => {
-                stopListening();
-                followUpTimerRef.current = null;
-              }, 10_000);
-            },
-            onError: (error: any) => {
-              console.error('Speech error:', error);
-              // Transition back to ACTIVE_LISTENING on error
-              setAgentState('ACTIVE_LISTENING');
-            },
-            onStart: () => {
-              // Check kill switch and global cancellation right after speech starts - CHECK REF FIRST
-              if (speechKillSwitchRef.current || globalCancellationFlagRef.current) {
-                elevenLabsTTS.stop();
-                setAgentState('ACTIVE_LISTENING');
-              }
-            },
+    speechKillSwitchRef.current = false; // Reset kill switch
 
-          });
-        } catch (error) {
-          console.error('Error starting ElevenLabs TTS:', error);
-          // Transition back to ACTIVE_LISTENING on error
-          setAgentState('ACTIVE_LISTENING');
-        }
-      }, 500);
+    // Transition to TTS_PLAYING state
+    setAgentState('TTS_PLAYING');
+
+    // Add natural speech patterns and pauses
+    const conversationalText = text
+      .replace(/\. /g, '... ') // Add pauses after periods
+      .replace(/, /g, ', ... ') // Add pauses after commas
+      .replace(/ and /g, ' ... and ') // Add pause before "and"
+      .replace(/\.$/, '...'); // Add pause at the end
+
+
+
+    // Wait a moment before speaking
+    setTimeout(async () => {
+      // Check kill switch and global cancellation flag before speaking - CHECK REF FIRST
+      if (speechKillSwitchRef.current || globalCancellationFlagRef.current) {
+        setAgentState('ACTIVE_LISTENING');
+        return;
+      }
+
+      try {
+        await elevenLabsTTS.speak(conversationalText, {
+          onDone: () => {
+            // Transition back to ACTIVE_LISTENING when TTS completes
+            setAgentState('ACTIVE_LISTENING');
+
+            // 1) Start active listening so user can speak right away:
+            startListening();
+
+            // 2) Schedule auto‑stop after 10 s if nobody talks:
+            if (followUpTimerRef.current) clearTimeout(followUpTimerRef.current);
+            followUpTimerRef.current = setTimeout(() => {
+              stopListening();
+              followUpTimerRef.current = null;
+            }, 10_000);
+          },
+          onError: (error: any) => {
+            console.error('Speech error:', error);
+            // Transition back to ACTIVE_LISTENING on error
+            setAgentState('ACTIVE_LISTENING');
+          },
+          onStart: () => {
+            // Check kill switch and global cancellation right after speech starts - CHECK REF FIRST
+            if (speechKillSwitchRef.current || globalCancellationFlagRef.current) {
+              elevenLabsTTS.stop();
+              setAgentState('ACTIVE_LISTENING');
+            }
+          },
+
+        });
+      } catch (error) {
+        console.error('Error starting ElevenLabs TTS:', error);
+        // Transition back to ACTIVE_LISTENING on error
+        setAgentState('ACTIVE_LISTENING');
+      }
+    }, 500);
   };
 
   // Handle summarize command
@@ -937,42 +937,42 @@ const HomeScreen = () => {
         console.log('🛑 Summary generation cancelled before starting');
         return;
       }
-      
+
       setAgentResponse('Generating inbox summary...');
-      
+
       // Check for cancellation before making API call
       if (globalCancellationFlagRef.current) {
         console.log('🛑 Summary generation cancelled before API call');
         return;
       }
-      
+
       console.log('📞 Calling emailService.generateInboxSummary...');
       const summary = await emailService.generateInboxSummary(token, globalCancellationFlagRef);
-      
+
       // Check if cancelled before proceeding
       if (globalCancellationFlagRef.current) {
         console.log('🛑 Summary generation was cancelled by wake word - NOT SPEAKING');
         return;
       }
-      
+
       // Check again before setting response
       if (globalCancellationFlagRef.current) {
         console.log('🛑 Summary generation was cancelled before setting response');
         return;
       }
-      
+
       // Show cache status in response
       const cacheStatus = summary.includes('[CACHED]') ? ' (cached)' : '';
       const displaySummary = summary.replace('[CACHED]', '');
-      
+
       setAgentResponse(displaySummary);
-      
+
       // Check again before speaking
       if (globalCancellationFlagRef.current) {
         console.log('🛑 Summary generation was cancelled before speaking - NOT SPEAKING');
         return;
       }
-      
+
       await speakResponse(displaySummary);
     } catch (error) {
       // Check if cancelled before showing error
@@ -980,7 +980,7 @@ const HomeScreen = () => {
         console.log('🛑 Summary generation was cancelled during error handling');
         return;
       }
-      
+
       console.error('❌ Error generating summary:', error);
       const fallbackSummary = "Hey! I'm having trouble connecting to your email right now, but I can see you want a summary. Try checking your connection and ask me again in a moment!";
       setAgentResponse(fallbackSummary);
@@ -991,43 +991,43 @@ const HomeScreen = () => {
   // Handle read email command
   const handleReadEmailCommand = async (text: string) => {
     setAgentResponse('Looking for that email...');
-    
+
     try {
       // Extract sender name from the command
       // Patterns: "read email from Bob", "read the email from Bob", "read message from Bob"
       const senderMatch = text.match(/(?:read.*?(?:email|message)\s+from\s+)([a-zA-Z\s]+)/i);
       const senderName = senderMatch ? senderMatch[1].trim() : '';
-      
+
       if (!senderName) {
         const errorMsg = "I didn't catch who you want to read the email from. Try saying 'read email from [name]'.";
         setAgentResponse(errorMsg);
         await speakResponse(errorMsg);
         return;
       }
-      
-      
+
+
       // Find the thread from this sender
       const thread = await emailService.findThreadBySender(senderName, token);
-      
+
       // Store the current thread for potential reply (both state and ref)
       setCurrentThread(thread);
       setCurrentSender(senderName);
       currentThreadRef.current = thread;
       currentSenderRef.current = senderName;
-      
+
       // Convert HTML email content to clean text using AI
       const cleanBody = await emailService.convertHtmlToText(thread.latestMessage.body, token, thread.latestMessage.subject);
       const emailContent = cleanBody;
-      
+
       setAgentResponse(emailContent);
       await speakResponse(emailContent);
-      
-         } catch (error) {
-       console.error('❌ Error reading email:', error);
-       const errorMsg = (error as Error).message || "Sorry, I couldn't find an email from that person. Try being more specific.";
-       setAgentResponse(errorMsg);
-       await speakResponse(errorMsg);
-     }
+
+    } catch (error) {
+      console.error('❌ Error reading email:', error);
+      const errorMsg = (error as Error).message || "Sorry, I couldn't find an email from that person. Try being more specific.";
+      setAgentResponse(errorMsg);
+      await speakResponse(errorMsg);
+    }
   };
 
   // Handle write reply command
@@ -1038,14 +1038,14 @@ const HomeScreen = () => {
       await speakResponse(errorMsg);
       return;
     }
-    
+
     setAgentResponse('Generating your reply...');
-    
+
     try {
       // Extract the instruction from the command
       // Patterns: "write a reply telling them...", "write a reply saying...", "reply that..."
       let instruction = '';
-      
+
       if (text.includes('telling')) {
         const match = text.match(/telling.*?(.*)/i);
         instruction = match ? match[1].trim() : '';
@@ -1060,39 +1060,39 @@ const HomeScreen = () => {
         const match = text.match(/write.*?reply\s+(.*)/i);
         instruction = match ? match[1].trim() : '';
       }
-      
+
       if (!instruction) {
         const errorMsg = "What would you like the reply to say? Try 'write a reply telling them [your message]'.";
         setAgentResponse(errorMsg);
         await speakResponse(errorMsg);
         return;
       }
-      
+
       console.log(`✍️ Generating reply with instruction: ${instruction}`);
-      
+
       // Generate the reply
       const replyData = await emailService.generateReply({
         threadId: currentThread.id,
         instruction: instruction,
         token: token,
       });
-      
+
       setAgentResponse(`Here's your reply:\n\n${replyData.reply}`);
       await speakResponse(`Here's your reply: ${replyData.reply}`);
-      
-         } catch (error) {
-       console.error('❌ Error generating reply:', error);
-       const errorMsg = (error as Error).message || "Sorry, I had trouble generating that reply. Please try again.";
-       setAgentResponse(errorMsg);
-       await speakResponse(errorMsg);
-     }
+
+    } catch (error) {
+      console.error('❌ Error generating reply:', error);
+      const errorMsg = (error as Error).message || "Sorry, I had trouble generating that reply. Please try again.";
+      setAgentResponse(errorMsg);
+      await speakResponse(errorMsg);
+    }
   };
 
   // Handle auto-reply command - generates and asks for confirmation
   const handleWriteAutoReplyCommand = async () => {
     setAgentResponse('Generating a reply...');
-    
-    
+
+
     try {
       // Check if we have a current thread to reply to (try state first, then ref)
       const threadToUse = currentThread || currentThreadRef.current;
@@ -1103,11 +1103,11 @@ const HomeScreen = () => {
         await speakResponse(errorMsg);
         return;
       }
-      
-      
+
+
       // Generate a contextual reply using AI
       const replyDraft = await emailService.generateContextualReply(threadToUse.id, token);
-      
+
       // Store the pending reply and set up edit mode
       setPendingReply(replyDraft);
       pendingReplyRef.current = replyDraft; // Also set the ref for reliability
@@ -1117,42 +1117,42 @@ const HomeScreen = () => {
       awaitingConfirmationRef.current = true; // Also set the ref for reliability
       setIsEditMode(true);
       isEditModeRef.current = true;
-      
+
       // Ask for edits instead of confirmation
       const editMessage = `Here's your reply:\n\n${replyDraft}\n\nDo you have any edits?`;
       setAgentResponse(editMessage);
       await speakResponse(`Here's your reply: ${replyDraft}. Do you have any edits?`);
-      
+
     } catch (error) {
       console.error('❌ Error generating auto-reply:', error);
       const fallbackReply = "I'm having trouble generating a reply right now. Please try again in a moment.";
       setAgentResponse(fallbackReply);
       await speakResponse(fallbackReply);
-         }
-   };
+    }
+  };
 
   // Handle confirmed send
   const handleSendConfirmedReply = async () => {
-    
+
     setAgentResponse('Sending your reply...');
-    
+
     try {
       // Send the email using the pending reply (use ref as fallback if state is lost)
       const threadToUse = currentThread || currentThreadRef.current;
       const replyToSend = pendingReply || pendingReplyRef.current;
-      
+
       if (!replyToSend) {
         throw new Error('No reply content available');
       }
-      
+
       await emailService.sendReply(threadToUse.id, replyToSend, token);
-      
+
       // Reset states
       setPendingReply('');
       pendingReplyRef.current = ''; // Also reset the ref
       setAwaitingConfirmation(false);
       awaitingConfirmationRef.current = false; // Also reset the ref
-      
+
       // Reset edit mode state
       setIsEditMode(false);
       isEditModeRef.current = false;
@@ -1160,17 +1160,17 @@ const HomeScreen = () => {
       editHistoryRef.current = [];
       setOriginalReply('');
       originalReplyRef.current = '';
-      
+
       const successMsg = "Reply sent successfully!";
       setAgentResponse(successMsg);
       await speakResponse(successMsg);
-      
+
     } catch (error) {
       console.error('❌ Error sending reply:', error);
       const errorMsg = "Sorry, I had trouble sending that reply. Please try again.";
       setAgentResponse(errorMsg);
       await speakResponse(errorMsg);
-      
+
       // Reset states on error too
       setPendingReply('');
       setAwaitingConfirmation(false);
@@ -1180,63 +1180,63 @@ const HomeScreen = () => {
   // Handle edit requests and send commands
   const handleEditRequest = async (text: string) => {
     console.log('✏️ HANDLING EDIT REQUEST - Text:', text);
-    
+
     const lowerText = text.toLowerCase();
-    
+
     // Check if user wants to send the email (more specific)
     if (lowerText.includes('send it') || lowerText === 'send' || lowerText === 'yes' || lowerText === 'okay' || lowerText === 'ok' || lowerText.includes('go ahead')) {
       console.log('✅ DETECTED SEND COMMAND - Sending email...');
       await handleSendConfirmedReply();
       return;
     }
-    
+
     // Check if user wants to cancel (more specific)
     if (lowerText === 'cancel' || lowerText === 'no' || lowerText === 'stop' || lowerText.includes('don\'t send') || lowerText.includes('cancel the')) {
       console.log('❌ DETECTED CANCEL COMMAND - Cancelling reply...');
       await handleCancelReply();
       return;
     }
-    
+
     // User provided edit feedback - regenerate the reply
     console.log('✏️ DETECTED EDIT FEEDBACK - Regenerating reply...');
-    
+
     try {
       setAgentResponse('Generating updated reply...');
-      
+
       // Get the current reply to edit
       const currentReply = pendingReply || pendingReplyRef.current;
       if (!currentReply) {
         throw new Error('No reply content available for editing');
       }
-      
+
       // Add this edit to history
       const newEditHistory = [...editHistory, text];
       setEditHistory(newEditHistory);
       editHistoryRef.current = newEditHistory;
-      
+
       // Generate updated reply with edit feedback
       const threadToUse = currentThread || currentThreadRef.current;
       if (!threadToUse) {
         throw new Error('No thread context available');
       }
-      
+
       // Use the new edit-aware API
       const updatedReply = await emailService.editReply(
-        threadToUse.id, 
+        threadToUse.id,
         currentReply,
         text,
         token
       );
-      
+
       // Update the pending reply
       setPendingReply(updatedReply);
       pendingReplyRef.current = updatedReply;
-      
+
       // Ask for more edits
       const editMessage = `Here's your updated reply:\n\n${updatedReply}\n\nDo you have any edits?`;
       setAgentResponse(editMessage);
       await speakResponse(`Here's your updated reply: ${updatedReply}. Do you have any edits?`);
-      
+
       console.log('✅ Reply updated with edit feedback');
     } catch (error) {
       console.error('❌ Error handling edit request:', error);
@@ -1252,7 +1252,7 @@ const HomeScreen = () => {
     pendingReplyRef.current = ''; // Also reset the ref
     setAwaitingConfirmation(false);
     awaitingConfirmationRef.current = false; // Also reset the ref
-    
+
     // Reset edit mode state
     setIsEditMode(false);
     isEditModeRef.current = false;
@@ -1260,11 +1260,11 @@ const HomeScreen = () => {
     editHistoryRef.current = [];
     setOriginalReply('');
     originalReplyRef.current = '';
-    
+
     const cancelMsg = "Okay, I've cancelled the reply.";
     setAgentResponse(cancelMsg);
     await speakResponse(cancelMsg);
-    
+
   };
 
   const handleVoiceInputSubmit = () => {
@@ -1281,12 +1281,12 @@ const HomeScreen = () => {
   const closeVoiceAgent = () => {
     // Activate kill switch to stop any ongoing TTS
     speechKillSwitchRef.current = true;
-    
+
     // Stop TTS if playing
     if (agentState === 'TTS_PLAYING') {
       elevenLabsTTS.stop();
     }
-    
+
     // Stop active listening if active
     if (agentState === 'ACTIVE_LISTENING') {
       try {
@@ -1295,29 +1295,29 @@ const HomeScreen = () => {
         // Ignore stop errors
       }
     }
-    
+
     // Clear any existing silence timeout
     if (silenceTimeout) {
       clearTimeout(silenceTimeout);
       setSilenceTimeout(null);
     }
-    
+
     // Reset UI state
     setListeningAnimation(false);
     setVoiceText('');
     setAgentResponse('');
     setVoiceInput('');
-    
+
     // Stop animations
     pulseAnim.stopAnimation();
     pulseAnim.setValue(1);
-    
+
     // Reset flags
     commandProcessedRef.current = false;
-    
+
     // Transition to WAKE_LISTENING (hides UI via derived showVoiceAgent)
     setAgentState('WAKE_LISTENING');
-    
+
     // Restart wake word detection after closing
     setTimeout(() => {
       speechKillSwitchRef.current = false;
@@ -1352,14 +1352,14 @@ const HomeScreen = () => {
           setListeningAnimation(false);
           pulseAnim.stopAnimation();
           pulseAnim.setValue(1);
-          
+
           // Stop voice recognition
           try {
             Voice.stop();
           } catch (error) {
             // Ignore stop errors
           }
-          
+
           // Process the command (will transition to PROCESSING)
           const finalText = finalRecognizedTextRef.current || voiceText;
           if (finalText && finalText !== 'Listening...') {
@@ -1374,12 +1374,12 @@ const HomeScreen = () => {
   const onSpeechError = (error: any) => {
     const code = error.error?.code;
     const msg = error.error?.message || '';
-  
+
     // Ignore "no speech detected" (1110)
     if (code === '1110' || msg.includes('No speech detected')) {
       return;
     }
-  
+
     // Ignore "already started" errors and retry wake word detection
     if (msg.includes('already started') || msg.includes('Speech recognition already started')) {
       wakeWordDetectionInProgressRef.current = false;
@@ -1389,7 +1389,7 @@ const HomeScreen = () => {
       setTimeout(() => startWakeWordDetection(), 1000);
       return;
     }
-  
+
     // All other errors: transition to WAKE_LISTENING
     setListeningAnimation(false);
     pulseAnim.stopAnimation();
@@ -1397,42 +1397,42 @@ const HomeScreen = () => {
       setAgentState('WAKE_LISTENING');
       startWakeWordDetection();
     }
-  
+
     // Show user-friendly fallback
     setVoiceText('Speech recognition failed. Please try again.');
     setAgentResponse('There was an error with speech recognition. Please use the text input.');
   };
-  
+
   const onSpeechResults = (event: any) => {
     try {
       const results = event.value || [];
       const text = results[0] || '';
-      
+
       if (!text) return;
-      
+
       // Always check for wake word first - allows interruption at any time
       if (handleWakeWord(text.toLowerCase())) {
         // Wake word was handled, don't process as command
         return;
       }
-      
+
       // Only process commands when in ACTIVE_LISTENING state
       if (agentState !== 'ACTIVE_LISTENING') {
         return;
       }
-      
+
       // Don't process if already processing a command (redundant check, but safe)
       // This check is actually redundant since we already checked agentState === 'ACTIVE_LISTENING' above
-      
+
       // Update transcript
       setVoiceText(text);
       finalRecognizedTextRef.current = text;
-      
+
       // Clear existing silence timeout
       if (silenceTimeout) {
         clearTimeout(silenceTimeout);
       }
-      
+
       // Set new silence timeout to process final transcript
       const newTimeout = setTimeout(() => {
         // Only process if still in ACTIVE_LISTENING state
@@ -1440,14 +1440,14 @@ const HomeScreen = () => {
           setListeningAnimation(false);
           pulseAnim.stopAnimation();
           pulseAnim.setValue(1);
-          
+
           // Stop voice recognition
           try {
             Voice.stop();
           } catch (error) {
             // Ignore stop errors
           }
-          
+
           // Process the command (will transition to PROCESSING)
           const finalText = finalRecognizedTextRef.current;
           if (finalText && finalText !== 'Listening...' && finalText.trim() !== '') {
@@ -1459,7 +1459,7 @@ const HomeScreen = () => {
           }
         }
       }, 7000);
-      
+
       setSilenceTimeout(newTimeout);
     } catch (error) {
       console.error('Error in onSpeechResults:', error);
@@ -1471,7 +1471,7 @@ const HomeScreen = () => {
     if (agentState !== 'ACTIVE_LISTENING') {
       return;
     }
-    
+
     const results = event.value;
     if (results && results.length > 0) {
       setVoiceText(results[0]);
@@ -1485,16 +1485,16 @@ const HomeScreen = () => {
       if (agentState !== 'ACTIVE_LISTENING') {
         return;
       }
-      
+
       // Stop wake word detection first to avoid conflicts
       await stopWakeWordDetection();
       await new Promise(resolve => setTimeout(resolve, 0));
-      
+
       // Set UI state for active listening
       setListeningAnimation(true);
       setVoiceText('Listening...');
       setAgentResponse('');
-      
+
       // Start pulsing animation
       Animated.loop(
         Animated.sequence([
@@ -1510,7 +1510,7 @@ const HomeScreen = () => {
           }),
         ])
       ).start();
-      
+
       // Start voice recognition
       if (Voice && typeof Voice.start === 'function') {
         // Stop any existing recognition first
@@ -1519,14 +1519,14 @@ const HomeScreen = () => {
         } catch (e) {
           // Ignore stop errors
         }
-        
+
         // Small delay to ensure Voice module is ready
         await new Promise(resolve => setTimeout(resolve, 200));
-        
+
         // Start voice recognition with retry logic
         let retryCount = 0;
         const maxRetries = 3;
-        
+
         while (retryCount < maxRetries) {
           try {
             await Voice.start('en-US');
@@ -1560,15 +1560,15 @@ const HomeScreen = () => {
         clearTimeout(silenceTimeout);
         setSilenceTimeout(null);
       }
-      
+
       // Stop the animation
       pulseAnim.stopAnimation();
       pulseAnim.setValue(1);
-      
+
       // Update UI state (don't change agentState here - caller handles transitions)
       setListeningAnimation(false);
       setVoiceText('Voice recognition stopped');
-      
+
       // Stop the Voice module
       if (Voice && typeof Voice.stop === 'function') {
         try {
@@ -1577,7 +1577,7 @@ const HomeScreen = () => {
           // Ignore stop errors
         }
       }
-      
+
       // Also destroy to clean up completely
       if (Voice && typeof Voice.destroy === 'function') {
         try {
@@ -1603,13 +1603,13 @@ const HomeScreen = () => {
       Voice.onSpeechError = onSpeechError;
       Voice.onSpeechResults = onSpeechResults;
       Voice.onSpeechPartialResults = onSpeechPartialResults;
-      
+
       // Request microphone permission
       Voice.isAvailable().catch(() => {
         // Ignore availability check errors
       });
     }
-    
+
     // Cleanup function to stop voice recognition when component unmounts
     return () => {
       // Reset flags
@@ -1617,7 +1617,7 @@ const HomeScreen = () => {
       commandProcessedRef.current = false;
       globalCancellationFlagRef.current = false;
       speechKillSwitchRef.current = false;
-      
+
       if (Voice && typeof Voice.stop === 'function') {
         try {
           Voice.stop();
@@ -1644,7 +1644,7 @@ const HomeScreen = () => {
         console.error('Error starting wake word detection on mount:', error);
       }
     }, 0);
-    
+
     return () => {
       clearTimeout(timer);
       try {
@@ -1673,7 +1673,7 @@ const HomeScreen = () => {
       });
       return updated;
     });
-    
+
     showMessage({
       message: 'Test badges added! Check first 3 emails',
       type: 'info',
@@ -1685,7 +1685,7 @@ const HomeScreen = () => {
     try {
       setIsGeneratingSummary(true);
       setSummaryText('');
-      
+
       const token = authContext?.token;
       if (!token) {
         showMessage({
@@ -1714,7 +1714,7 @@ const HomeScreen = () => {
   const processEmailsWithAI = async () => {
     try {
       setIsLoading(true);
-      
+
       const token = authContext?.token;
       if (!token) {
         showMessage({
@@ -1733,16 +1733,16 @@ const HomeScreen = () => {
 
       // Call the new endpoint to process and label emails
       console.log('🔍 Making request to process emails with token:', token.substring(0, 20) + '...');
-      
+
       const requestBody = {
         accessToken: token
       };
       console.log('🔍 Request body:', JSON.stringify(requestBody, null, 2));
-      
+
       // Add timeout to prevent hanging
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-      
+
       const response = await fetch(`https://dixieai.onrender.com/api/email/process-user-emails`, {
         method: 'POST',
         headers: {
@@ -1752,9 +1752,9 @@ const HomeScreen = () => {
         body: JSON.stringify(requestBody),
         signal: controller.signal
       });
-      
+
       clearTimeout(timeoutId);
-      
+
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -1762,26 +1762,26 @@ const HomeScreen = () => {
       }
 
       const result = await response.json();
-      
+
       if (result.success) {
         showMessage({
           message: 'Success!',
           description: `Processed ${result.processed} emails. Summary: ${result.summary.needsReply} need reply, ${result.summary.important} important updates`,
           type: 'success',
         });
-        
+
         // Log the results for debugging
         console.log('Email processing results:', result);
-        
+
         // Store AI labels for each email
-        const newAiLabels: {[threadId: string]: string} = {};
-        
+        const newAiLabels: { [threadId: string]: string } = {};
+
         result.labeledEmails.forEach((email: any, index: number) => {
           // Find the thread ID by matching email content
-          const matchingThread = threads.find(thread => 
+          const matchingThread = threads.find(thread =>
             thread.subject === email.subject && thread.from === email.from
           );
-          
+
           if (matchingThread) {
             newAiLabels[matchingThread.id] = email.label.label;
             console.log(`✅ Matched email ${index}: "${email.subject}" -> Thread ID: ${matchingThread.id}`);
@@ -1789,9 +1789,9 @@ const HomeScreen = () => {
             console.log(`❌ No match for email ${index}: "${email.subject}" from "${email.from}"`);
           }
         });
-        
+
         setAiLabels(newAiLabels);
-        
+
         // You can store these results or use them for instant summaries
         // For now, just show the summary
         setSummaryText(`Email Analysis Complete!\n\nYou have:\n• ${result.summary.needsReply || 0} emails that need your reply\n• ${result.summary.important || 0} important updates\n• ${result.summary.marketing || 0} marketing emails\n• ${result.summary.receipts || 0} receipts\n• ${result.summary.newsletter || 0} newsletters\n• ${result.summary.spam || 0} spam emails\n• ${result.summary.work || 0} work emails\n• ${result.summary.personal || 0} personal emails\n• ${result.summary.other || 0} other emails\n\nTotal: ${result.processed} emails processed`);
@@ -1814,7 +1814,7 @@ const HomeScreen = () => {
   // Speak the summary using text-to-speech (now consolidated with speakResponse)
   const speakSummary = (text: string) => {
     console.log('🎤 SPEAK SUMMARY CALLED - Text:', text.substring(0, 50) + '...');
-    
+
     if (isTtsSpeaking) {
       console.log('🛑 Stopping current speech...');
       elevenLabsTTS.stop();
@@ -1844,17 +1844,17 @@ const HomeScreen = () => {
 
   const classifyEmailsForReply = async () => {
     if (!token || originalThreads.length === 0) return;
-    
+
     try {
       // Get thread IDs for classification (process all threads)
       const threadIds = originalThreads.map(thread => thread.id);
-      
+
       console.log(`Classifying ${threadIds.length} threads for needs reply and important updates...`);
-      
+
       const classifications = await emailService.classifyEmails(token, threadIds);
-      
+
       console.log('Classification results:', classifications);
-      
+
       // Update threads with classification results
       setOriginalThreads(prev => {
         const updated = prev.map(thread => {
@@ -1864,29 +1864,29 @@ const HomeScreen = () => {
             needsReply: classification?.needsReply || false,
             isImportant: classification?.isImportant || false,
           };
-          
+
           // Debug log for threads with badges
           if (updatedThread.needsReply || updatedThread.isImportant) {
             console.log(`Thread ${thread.id} (${thread.subject}): needsReply=${updatedThread.needsReply}, isImportant=${updatedThread.isImportant}`);
           }
-          
+
           return updatedThread;
         });
         return updated;
       });
-      
+
       // Count how many need replies and how many are important
       const needsReplyCount = classifications.filter(c => c.needsReply).length;
       const importantCount = classifications.filter(c => c.isImportant).length;
-      
+
       console.log(`Classification complete: ${needsReplyCount} need replies, ${importantCount} are important`);
-      
+
       showMessage({
         message: `Analyzed ${threadIds.length} emails - ${needsReplyCount} need replies, ${importantCount} are important`,
         type: 'info',
         duration: 4000,
       });
-      
+
     } catch (error) {
       console.error('Error classifying emails:', error);
       showMessage({
@@ -1924,15 +1924,15 @@ const HomeScreen = () => {
 
   const formatThreadTime = (dateString: string): string => {
     if (!dateString) return 'No date';
-    
+
     const date = new Date(dateString);
-    
+
     // Check if date is valid
     if (isNaN(date.getTime())) {
       console.warn('Invalid date string:', dateString);
       return 'Invalid Date';
     }
-    
+
     const now = new Date();
     if (
       date.getFullYear() === now.getFullYear() &&
@@ -1952,24 +1952,24 @@ const HomeScreen = () => {
     if (item.id === '198248d73322a1da' || item.id === '198245f286efc3f0') {
       console.log(`Thread ${item.id}: read=${item.read}, subject="${item.subject}"`);
     }
-    
+
     return (
-    <TouchableOpacity
+      <TouchableOpacity
         style={[
           styles.threadItem,
           item.read === false && styles.unreadThread
         ]}
-      onPress={() => handleThreadPress(item)}
-        
-    >
-      <View style={styles.threadHeader}>
+        onPress={() => handleThreadPress(item)}
+
+      >
+        <View style={styles.threadHeader}>
           <View style={styles.threadFromContainer}>
             <Text style={[
               styles.threadFrom,
               item.read === false ? styles.unreadText : styles.readText
             ]} numberOfLines={1}>
-          {String(item.from || 'Unknown')}
-        </Text>
+              {String(item.from || 'Unknown')}
+            </Text>
             {item.starred && <Ionicons name="star" size={16} color="#F9AB00" style={styles.starIcon} />}
             {item.important && <Ionicons name="flag" size={16} color="#FF6D01" style={styles.importantIcon} />}
           </View>
@@ -1978,18 +1978,18 @@ const HomeScreen = () => {
             item.read === false ? styles.unreadText : styles.readText
           ]}>
             {formatThreadTime(String(item.date || ''))}
-        </Text>
-      </View>
+          </Text>
+        </View>
         <Text style={[
           styles.threadSubject,
           item.read === false ? styles.unreadText : styles.readText
         ]} numberOfLines={1}>
-        {String(item.subject || '(No subject)')}
-      </Text>
-      <Text style={styles.threadSnippet} numberOfLines={2}>
-        {String(item.snippet || '')}
-      </Text>
-      <View style={styles.threadFooter}>
+          {String(item.subject || '(No subject)')}
+        </Text>
+        <Text style={styles.threadSnippet} numberOfLines={2}>
+          {String(item.snippet || '')}
+        </Text>
+        <View style={styles.threadFooter}>
           <View style={styles.threadLabels}>
             {item.needsReply && (
               <View style={styles.needsReplyBadge}>
@@ -2009,9 +2009,9 @@ const HomeScreen = () => {
               </View>
             )}
           </View>
-      </View>
-    </TouchableOpacity>
-  );
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   const renderEmpty = () => (
@@ -2048,11 +2048,11 @@ const HomeScreen = () => {
             <Ionicons name="menu" size={24} color="#666" />
           </TouchableOpacity>
           <Text style={styles.currentCategory}>
-            {currentCategory === 'promotions' ? 'Promotions' : 
-             currentCategory === 'primary' ? 'Primary' :
-             currentCategory === 'social' ? 'Social' :
-             currentCategory === 'updates' ? 'Updates' :
-             currentCategory === 'sent' ? 'Sent' : 'Primary'}
+            {currentCategory === 'promotions' ? 'Promotions' :
+              currentCategory === 'primary' ? 'Primary' :
+                currentCategory === 'social' ? 'Social' :
+                  currentCategory === 'updates' ? 'Updates' :
+                    currentCategory === 'sent' ? 'Sent' : 'Primary'}
           </Text>
           <TouchableOpacity onPress={processEmailsWithAI} style={styles.aiButton} disabled={isLoading}>
             <Ionicons name="sparkles" size={24} color={isLoading ? "#ccc" : "#4285F4"} />
@@ -2061,7 +2061,7 @@ const HomeScreen = () => {
             <Ionicons name="log-out-outline" size={24} color="#666" />
           </TouchableOpacity>
         </View>
-        
+
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
@@ -2075,12 +2075,6 @@ const HomeScreen = () => {
           <TouchableOpacity onPress={handleVoiceCommand} style={styles.voiceButton}>
             <Ionicons name="mic" size={20} color="#4285F4" />
           </TouchableOpacity>
-          {isWakeWordListening && (
-            <View style={styles.wakeWordIndicator}>
-              <Ionicons name="ear" size={12} color="#34A853" />
-              <Text style={styles.wakeWordText}>Listening</Text>
-            </View>
-          )}
         </View>
 
         {/* Clear Filters Button */}
@@ -2089,8 +2083,8 @@ const HomeScreen = () => {
             <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
               <Ionicons name="close-circle" size={16} color="#EA4335" />
               <Text style={styles.clearText}>Clear</Text>
-        </TouchableOpacity>
-        </View>
+            </TouchableOpacity>
+          </View>
         )}
 
       </View>
@@ -2100,27 +2094,27 @@ const HomeScreen = () => {
         {error ? (
           renderError()
         ) : (
-      <FlatList
-        data={threads}
-        renderItem={renderThread}
-        keyExtractor={(item) => item.id}
-        ListEmptyComponent={!isLoading ? renderEmpty : null}
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} />
-        }
-        contentContainerStyle={threads.length === 0 ? styles.emptyListContainer : undefined}
-        showsVerticalScrollIndicator={false}
-        onEndReached={loadMoreThreads}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={
-          isLoadingMore ? (
-            <View style={styles.loadingMoreContainer}>
-              <ActivityIndicator size="small" color="#4285F4" />
-              <Text style={styles.loadingMoreText}>Loading more emails...</Text>
-            </View>
-          ) : null
-        }
-      />
+          <FlatList
+            data={threads}
+            renderItem={renderThread}
+            keyExtractor={(item) => item.id}
+            ListEmptyComponent={!isLoading ? renderEmpty : null}
+            refreshControl={
+              <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} />
+            }
+            contentContainerStyle={threads.length === 0 ? styles.emptyListContainer : undefined}
+            showsVerticalScrollIndicator={false}
+            onEndReached={loadMoreThreads}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={
+              isLoadingMore ? (
+                <View style={styles.loadingMoreContainer}>
+                  <ActivityIndicator size="small" color="#4285F4" />
+                  <Text style={styles.loadingMoreText}>Loading more emails...</Text>
+                </View>
+              ) : null
+            }
+          />
         )}
       </View>
 
@@ -2162,7 +2156,7 @@ const HomeScreen = () => {
                 <Text style={styles.voiceAgentTitle}>Dixie Voice Agent</Text>
               </View>
               <View style={styles.voiceAgentHeaderRight}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={closeVoiceAgent}
                   style={styles.voiceAgentCloseButton}
                 >
@@ -2172,7 +2166,7 @@ const HomeScreen = () => {
             </View>
 
             {/* Scrollable Content Area */}
-            <ScrollView 
+            <ScrollView
               style={styles.voiceAgentContent}
               showsVerticalScrollIndicator={true}
               contentContainerStyle={styles.voiceAgentContentContainer}
@@ -2181,7 +2175,7 @@ const HomeScreen = () => {
               {isProcessingCommand && (
                 <View style={styles.listeningStatusContainer}>
                   <View style={styles.listeningIndicator}>
-                    <Animated.View 
+                    <Animated.View
                       style={[
                         styles.listeningWave,
                         {
@@ -2189,10 +2183,10 @@ const HomeScreen = () => {
                         }
                       ]}
                     />
-                    <Ionicons 
-                      name="sync" 
-                      size={32} 
-                      color="#ff8800" 
+                    <Ionicons
+                      name="sync"
+                      size={32}
+                      color="#ff8800"
                     />
                   </View>
                   <Text style={styles.listeningText}>
@@ -2206,7 +2200,7 @@ const HomeScreen = () => {
                 <View style={styles.listeningStatusContainer}>
                   <View style={styles.listeningIndicator}>
                     {listeningAnimation && (
-                      <Animated.View 
+                      <Animated.View
                         style={[
                           styles.listeningWave,
                           {
@@ -2215,10 +2209,10 @@ const HomeScreen = () => {
                         ]}
                       />
                     )}
-                    <Ionicons 
-                      name="mic" 
-                      size={32} 
-                      color={listeningAnimation ? "#ff4444" : "#4285F4"} 
+                    <Ionicons
+                      name="mic"
+                      size={32}
+                      color={listeningAnimation ? "#ff4444" : "#4285F4"}
                     />
                   </View>
                   <Text style={styles.listeningText}>
@@ -2255,21 +2249,21 @@ const HomeScreen = () => {
 
             {/* Input Area */}
             <View style={styles.voiceAgentInputContainer}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={isListening ? stopListening : startListening}
                 style={[
-                  styles.voiceAgentMicButton, 
+                  styles.voiceAgentMicButton,
                   isListening && styles.voiceAgentMicButtonListening,
                   listeningAnimation && styles.voiceAgentMicButtonPulsing
                 ]}
               >
-                <Ionicons 
-                  name={isListening ? "stop" : "mic"} 
-                  size={24} 
-                  color={isListening ? "#fff" : "#4285F4"} 
+                <Ionicons
+                  name={isListening ? "stop" : "mic"}
+                  size={24}
+                  color={isListening ? "#fff" : "#4285F4"}
                 />
               </TouchableOpacity>
-              
+
               <TextInput
                 style={styles.voiceAgentTextInput}
                 placeholder="Type your command here..."
@@ -2278,7 +2272,7 @@ const HomeScreen = () => {
                 onSubmitEditing={handleVoiceInputSubmit}
                 placeholderTextColor="#999"
               />
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={handleVoiceInputSubmit}
                 style={styles.voiceAgentSendButton}
                 disabled={isProcessingCommand}
@@ -2308,26 +2302,26 @@ const HomeScreen = () => {
               </View>
               <View style={styles.summaryControls}>
                 {!isGeneratingSummary && summaryText && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={() => speakSummary(summaryText)}
                     style={styles.speechButton}
                   >
-                    <Ionicons 
-                      name={isTtsSpeaking ? "pause" : "volume-high"} 
-                      size={20} 
-                      color={isTtsSpeaking ? "#FF6D01" : "#4285F4"} 
+                    <Ionicons
+                      name={isTtsSpeaking ? "pause" : "volume-high"}
+                      size={20}
+                      color={isTtsSpeaking ? "#FF6D01" : "#4285F4"}
                     />
                   </TouchableOpacity>
                 )}
               </View>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => setShowSummaryModal(false)}
                 style={styles.closeButton}
               >
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
-            
+
             <View style={styles.modalBody}>
               {isGeneratingSummary ? (
                 <View style={styles.summaryLoading}>
@@ -2353,12 +2347,12 @@ const HomeScreen = () => {
       {/* Side Panel */}
       {showSidePanel && (
         <>
-          <TouchableOpacity 
-            style={styles.sidePanelOverlay} 
+          <TouchableOpacity
+            style={styles.sidePanelOverlay}
             onPress={toggleSidePanel}
             activeOpacity={1}
           />
-          <Animated.View 
+          <Animated.View
             style={[
               styles.sidePanel,
               { transform: [{ translateX: slideAnim }] }
@@ -2368,7 +2362,7 @@ const HomeScreen = () => {
               <Text style={styles.sidePanelTitle}>Gmail</Text>
               <Text style={styles.sidePanelUser}>{String(user?.email || 'User')}</Text>
             </View>
-            
+
             <ScrollView style={styles.sidePanelContent}>
               {/* Categories Section */}
               <View style={styles.sidePanelSection}>
@@ -2383,10 +2377,10 @@ const HomeScreen = () => {
                     onPress={() => selectCategoryFromSidePanel(category.id)}
                   >
                     <View style={styles.sidePanelItemIcon}>
-                      <Ionicons 
-                        name={category.icon as any} 
-                        size={20} 
-                        color={currentCategory === category.id ? '#4285F4' : '#6b7280'} 
+                      <Ionicons
+                        name={category.icon as any}
+                        size={20}
+                        color={currentCategory === category.id ? '#4285F4' : '#6b7280'}
                       />
                     </View>
                     <Text style={[
