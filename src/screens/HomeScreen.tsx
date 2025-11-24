@@ -193,19 +193,20 @@ const HomeScreen = () => {
     setThreads(sortedThreads);
   };
 
-  // Fetch threads on component mount and when token changes
+  // Fetch threads on component mount, when token changes, or when category changes
+  // (since backend now filters by category, we need to refetch when category changes)
   useEffect(() => {
-    if (token) {
-      fetchThreads();
+    if (token && currentCategory) {
+      fetchThreads(false); // Always do a fresh fetch (not loadMore) when category/token changes
     }
-  }, [token]);
-
-  // Re-apply filters and categorization when they change
+  }, [token, currentCategory]);
+  
+  // Re-apply filters and categorization when threads or filters change
   useEffect(() => {
     if (originalThreads.length > 0) {
       applyFiltersAndCategorization(originalThreads);
     }
-  }, [originalThreads, currentCategory, selectedLabels, searchQuery]);
+  }, [originalThreads, selectedLabels, searchQuery]);
 
   const fetchThreads = async (loadMore: boolean = false) => {
     if (!token) return;
@@ -227,25 +228,34 @@ const HomeScreen = () => {
     
     try {
       const [threadsResult, fetchedLabels] = await Promise.all([
-        emailService.fetchThreads(token, loadMore ? nextPageToken : undefined),
+        emailService.fetchThreads(token, loadMore ? nextPageToken : undefined, currentCategory),
         loadMore ? Promise.resolve(labels) : emailService.fetchLabels(token)
       ]);
       
+      let allThreads: EmailThread[];
+      
       if (loadMore) {
-        // Append new threads to existing ones
-        setOriginalThreads(prev => [...prev, ...threadsResult.threads]);
+        // Append new threads to existing ones, deduplicating by ID
+        const existingIds = new Set(originalThreads.map(t => t.id));
+        const newThreads = threadsResult.threads.filter(t => !existingIds.has(t.id));
+        const updatedThreads = [...originalThreads, ...newThreads];
+        setOriginalThreads(updatedThreads);
+        allThreads = updatedThreads;
         setNextPageToken(threadsResult.nextPageToken);
         setHasMoreThreads(threadsResult.hasMore);
       } else {
-        // Replace all threads
-        setOriginalThreads(threadsResult.threads);
+        // Replace all threads, deduplicating by ID in case of race conditions
+        const uniqueThreads = Array.from(
+          new Map(threadsResult.threads.map(t => [t.id, t])).values()
+        );
+        setOriginalThreads(uniqueThreads);
+        allThreads = uniqueThreads;
         setNextPageToken(threadsResult.nextPageToken);
         setHasMoreThreads(threadsResult.hasMore);
         setLabels(fetchedLabels);
       }
       
       // Apply current categorization and filtering
-      const allThreads = loadMore ? [...originalThreads, ...threadsResult.threads] : threadsResult.threads;
       applyFiltersAndCategorization(allThreads);
     } catch (err: any) {
       let errorMessage = err.message || 'Failed to fetch emails';
@@ -1932,8 +1942,8 @@ const HomeScreen = () => {
       // Show time in h:mm A
       return dayjs(date).format('h:mm A');
     } else {
-      // Show date as M/D/YYYY
-      return dayjs(date).format('M/D/YYYY');
+      // Show date as "Nov 4" format
+      return dayjs(date).format('MMM D');
     }
   };
 
@@ -1958,7 +1968,7 @@ const HomeScreen = () => {
               styles.threadFrom,
               item.read === false ? styles.unreadText : styles.readText
             ]} numberOfLines={1}>
-          {item.from || 'Unknown'}
+          {String(item.from || 'Unknown')}
         </Text>
             {item.starred && <Ionicons name="star" size={16} color="#F9AB00" style={styles.starIcon} />}
             {item.important && <Ionicons name="flag" size={16} color="#FF6D01" style={styles.importantIcon} />}
@@ -1967,17 +1977,17 @@ const HomeScreen = () => {
             styles.threadTime,
             item.read === false ? styles.unreadText : styles.readText
           ]}>
-            {formatThreadTime(item.date)}
+            {formatThreadTime(String(item.date || ''))}
         </Text>
       </View>
         <Text style={[
           styles.threadSubject,
           item.read === false ? styles.unreadText : styles.readText
         ]} numberOfLines={1}>
-        {item.subject}
+        {String(item.subject || '(No subject)')}
       </Text>
       <Text style={styles.threadSnippet} numberOfLines={2}>
-        {item.snippet}
+        {String(item.snippet || '')}
       </Text>
       <View style={styles.threadFooter}>
           <View style={styles.threadLabels}>
@@ -1995,7 +2005,7 @@ const HomeScreen = () => {
             )}
             {aiLabels[item.id] && (
               <View style={[styles.threadLabel, { backgroundColor: getAiLabelColor(aiLabels[item.id] || '') }]}>
-                <Text style={styles.threadLabelText}>{aiLabels[item.id]}</Text>
+                <Text style={styles.threadLabelText}>{String(aiLabels[item.id] || '')}</Text>
               </View>
             )}
           </View>
@@ -2356,7 +2366,7 @@ const HomeScreen = () => {
           >
             <View style={styles.sidePanelHeader}>
               <Text style={styles.sidePanelTitle}>Gmail</Text>
-              <Text style={styles.sidePanelUser}>{user?.email || 'User'}</Text>
+              <Text style={styles.sidePanelUser}>{String(user?.email || 'User')}</Text>
             </View>
             
             <ScrollView style={styles.sidePanelContent}>
@@ -2383,15 +2393,15 @@ const HomeScreen = () => {
                       styles.sidePanelItemText,
                       currentCategory === category.id && styles.sidePanelItemTextActive
                     ]}>
-                      {category.name}
+                      {String(category.name || '')}
                     </Text>
-                    {category.count > 0 && (
+                    {(category.count && category.count > 0) ? (
                       <View style={styles.sidePanelItemBadge}>
                         <Text style={styles.sidePanelItemBadgeText}>
-                          {category.count > 99 ? '99+' : category.count}
+                          {category.count > 99 ? '99+' : String(category.count)}
                         </Text>
                       </View>
-                    )}
+                    ) : null}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -2409,18 +2419,18 @@ const HomeScreen = () => {
                     }}
                   >
                     <View style={styles.sidePanelItemIcon}>
-                      <View style={[styles.labelColor, { backgroundColor: label.color }]} />
+                      <View style={[styles.labelColor, { backgroundColor: label.color || '#6b7280' }]} />
                     </View>
                     <Text style={styles.sidePanelItemText}>
-                      {label.name}
+                      {String(label.name || '')}
                     </Text>
-                    {label.count && label.count > 0 && (
+                    {(label.count && label.count > 0) ? (
                       <View style={styles.sidePanelItemBadge}>
                         <Text style={styles.sidePanelItemBadgeText}>
-                          {label.count > 99 ? '99+' : label.count}
+                          {label.count > 99 ? '99+' : String(label.count)}
                         </Text>
                       </View>
-                    )}
+                    ) : null}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -2823,9 +2833,9 @@ const styles = StyleSheet.create({
   sidePanel: {
     position: 'absolute',
     top: 0,
+    bottom: 0,
     left: 0,
     width: 300,
-    height: '100%',
     backgroundColor: '#fff',
     zIndex: 1001,
     shadowColor: '#000',

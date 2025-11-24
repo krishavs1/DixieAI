@@ -163,16 +163,18 @@ const getBaseURL = async (): Promise<string> => {
 };
 
 export const emailService = {
-  async fetchThreads(token: string, pageToken?: string): Promise<{
+  async fetchThreads(token: string, pageToken?: string, category?: EmailCategory): Promise<{
     threads: EmailThread[];
     nextPageToken?: string;
     hasMore: boolean;
   }> {
     try {
       const baseURL = await getBaseURL();
-      const url = pageToken 
-        ? `${baseURL}/api/email/threads?pageToken=${encodeURIComponent(pageToken)}`
-        : `${baseURL}/api/email/threads`;
+      const params = new URLSearchParams();
+      if (pageToken) params.append('pageToken', pageToken);
+      if (category && category !== 'all') params.append('category', category);
+      
+      const url = `${baseURL}/api/email/threads?${params.toString()}`;
         
       const response = await retryFetch(() =>
         fetchWithTimeout(url, {

@@ -21,6 +21,7 @@ import { AuthContext } from '../context/AuthContext';
 import EmailRenderer from '../components/EmailRenderer';
 import * as Speech from 'expo-speech';
 import { emailService } from '../services/emailService';
+import { getBackendURL } from '../config/api';
 
 interface Attachment {
   id: string;
@@ -136,7 +137,8 @@ const ComposeScreen = ({ route }: any) => {
     
     try {
       // Call the email service to get inbox data
-      const response = await fetch('http://localhost:3000/api/email/threads', {
+      const backendURL = await getBackendURL();
+      const response = await fetch(`${backendURL}/api/email/threads`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -226,7 +228,8 @@ Please generate a concise, professional reply that:
 Keep the reply under 100 words and make it sound natural and human-written.`;
 
       // Call the AI service (you'll need to implement this endpoint)
-      const response = await fetch('http://localhost:3000/api/ai/generate-reply', {
+      const backendURL = await getBackendURL();
+      const response = await fetch(`${backendURL}/api/ai/generate-reply`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -241,10 +241,36 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
     
+    // Build Gmail query based on category filter (like Gmail does)
+    const searchQuery = req.query.q as string || '';
+    const category = req.query.category as string;
+    const maxResults = parseInt(req.query.maxResults as string) || 50; // Default 50 per category like Gmail
+    
+    // Build category filter
+    let categoryFilter = '';
+    if (category && category !== 'all') {
+      if (category === 'primary') {
+        // Primary = inbox emails that aren't categorized as promotions/updates/social
+        // This matches Gmail's Primary tab behavior
+        categoryFilter = 'in:inbox -category:promotions -category:updates -category:social';
+      } else {
+        // For other categories (promotions, updates, social), use category filter
+        categoryFilter = `in:inbox category:${category}`;
+      }
+    } else {
+      // Default: just inbox if no category specified
+      categoryFilter = 'in:inbox';
+    }
+    
+    // Combine search query with category filter
+    const gmailQuery = searchQuery 
+      ? `${categoryFilter} ${searchQuery}`
+      : categoryFilter;
+    
     const response = await gmail.users.threads.list({
       userId: 'me',
-      maxResults: 20, // Smaller page size for classification testing
-      q: req.query.q as string || '',
+      maxResults: maxResults,
+      q: gmailQuery,
       pageToken: req.query.pageToken as string || undefined,
     });
 

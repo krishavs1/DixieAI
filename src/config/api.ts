@@ -109,6 +109,13 @@ export const getBackendURL = async (): Promise<string> => {
     return cachedBackendURL;
   }
 
+  // Force production URL (Render backend) - skip localhost checking
+  cachedBackendURL = PRODUCTION_URL;
+  console.log(`🔧 Using Render backend: ${PRODUCTION_URL}`);
+  return PRODUCTION_URL;
+
+  // Commented out localhost checking - uncomment if you need local dev
+  /*
   if (!__DEV__) {
     cachedBackendURL = PRODUCTION_URL;
     return PRODUCTION_URL;
@@ -129,6 +136,7 @@ export const getBackendURL = async (): Promise<string> => {
   console.log('⚠️ No local backend found, falling back to production URL');
   cachedBackendURL = PRODUCTION_URL;
   return PRODUCTION_URL;
+  */
 };
 
 // Function to clear the cache (useful when network changes)
@@ -136,6 +144,9 @@ export const clearBackendURLCache = () => {
   cachedBackendURL = null;
   console.log('🔄 Backend URL cache cleared');
 };
+
+// Clear cache on import to ensure fresh resolution
+clearBackendURLCache();
 
 // Clear cache on import to force rediscovery
 // clearBackendURLCache(); // Removed since we simplified caching
@@ -146,7 +157,7 @@ export const API_CONFIG = {
     return getBackendURL();
   },
   ENDPOINTS: {
-    AUTH: {
+    AUTH: {``
       GOOGLE_URL: '/api/auth/google/url',
       GOOGLE_CALLBACK: '/api/auth/google/callback',
       REFRESH: '/api/auth/refresh',
