@@ -1939,11 +1939,14 @@ const HomeScreen = () => {
       date.getMonth() === now.getMonth() &&
       date.getDate() === now.getDate()
     ) {
-      // Show time in h:mm A
+      // Show time in h:mm A for today
       return dayjs(date).format('h:mm A');
-    } else {
-      // Show date as "Nov 4" format
+    } else if (date.getFullYear() === now.getFullYear()) {
+      // Show date as "Nov 4" format for current year
       return dayjs(date).format('MMM D');
+    } else {
+      // Show date as "11/4/2024" format for previous years
+      return dayjs(date).format('M/D/YYYY');
     }
   };
 
@@ -2367,36 +2370,42 @@ const HomeScreen = () => {
               {/* Categories Section */}
               <View style={styles.sidePanelSection}>
                 <Text style={styles.sidePanelSectionTitle}>Categories</Text>
-                {getCategoryInfo().map((category) => (
-                  <TouchableOpacity
-                    key={category.id}
-                    style={[
-                      styles.sidePanelItem,
-                      currentCategory === category.id && styles.sidePanelItemActive
-                    ]}
-                    onPress={() => selectCategoryFromSidePanel(category.id)}
-                  >
-                    <View style={styles.sidePanelItemIcon}>
-                      <Ionicons
-                        name={category.icon as any}
-                        size={20}
-                        color={currentCategory === category.id ? '#4285F4' : '#6b7280'}
-                      />
-                    </View>
-                    <Text style={[
-                      styles.sidePanelItemText,
-                      currentCategory === category.id && styles.sidePanelItemTextActive
-                    ]}>
-                      {String(category.name || '')}
-                    </Text>
-                    {(category.count && category.count > 0) ? (
-                      <View style={styles.sidePanelItemBadge}>
-                        <Text style={styles.sidePanelItemBadgeText}>
-                          {category.count > 99 ? '99+' : String(category.count)}
-                        </Text>
+                {getCategoryInfo().map((category, index) => (
+                  <React.Fragment key={category.id}>
+                    {/* Add divider before "Sent" category */}
+                    {category.id === 'sent' && (
+                      <View style={styles.categoryDivider} />
+                    )}
+                    <TouchableOpacity
+                      key={category.id}
+                      style={[
+                        styles.sidePanelItem,
+                        currentCategory === category.id && styles.sidePanelItemActive
+                      ]}
+                      onPress={() => selectCategoryFromSidePanel(category.id)}
+                    >
+                      <View style={styles.sidePanelItemIcon}>
+                        <Ionicons
+                          name={category.icon as any}
+                          size={20}
+                          color={currentCategory === category.id ? '#4285F4' : '#6b7280'}
+                        />
                       </View>
-                    ) : null}
-                  </TouchableOpacity>
+                      <Text style={[
+                        styles.sidePanelItemText,
+                        currentCategory === category.id && styles.sidePanelItemTextActive
+                      ]}>
+                        {String(category.name || '')}
+                      </Text>
+                      {(category.count && category.count > 0) ? (
+                        <View style={styles.sidePanelItemBadge}>
+                          <Text style={styles.sidePanelItemBadgeText}>
+                            {category.count > 99 ? '99+' : String(category.count)}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
+                  </React.Fragment>
                 ))}
               </View>
 
@@ -2908,6 +2917,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#fff',
     fontWeight: '600',
+  },
+  categoryDivider: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 8,
+    marginHorizontal: 12,
   },
   // Floating Action Button
   fab: {

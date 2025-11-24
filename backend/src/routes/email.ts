@@ -17,7 +17,7 @@ const router = express.Router();
 router.post('/test-label', async (req, res) => {
   try {
     const { sender, subject, body } = req.body;
-    
+
     if (!sender || !subject || !body) {
       return res.status(400).json({ error: 'Missing required fields: sender, subject, body' });
     }
@@ -30,9 +30,9 @@ router.post('/test-label', async (req, res) => {
     };
 
     logger.info(`Testing email labeling for: ${subject}`);
-    
+
     const label = await AIService.labelEmail(emailContent);
-    
+
     return res.json({
       success: true,
       email: emailContent,
@@ -49,13 +49,13 @@ router.post('/test-label', async (req, res) => {
 router.post('/label-existing', async (req, res) => {
   try {
     const { emails } = req.body;
-    
+
     if (!emails || !Array.isArray(emails)) {
       return res.status(400).json({ error: 'Missing or invalid emails array' });
     }
 
     logger.info(`Starting batch labeling for ${emails.length} emails`);
-    
+
     const emailContents: EmailContent[] = emails.map((email: any) => ({
       from: email.from || email.sender || '',
       subject: email.subject || '',
@@ -64,7 +64,7 @@ router.post('/label-existing', async (req, res) => {
     }));
 
     const labels = await AIService.labelEmailsBatch(emailContents);
-    
+
     return res.json({
       success: true,
       processed: emails.length,
@@ -81,48 +81,48 @@ router.post('/label-existing', async (req, res) => {
 router.post('/process-user-emails', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { accessToken } = req.user;
-    
+
     if (!accessToken) {
       return res.status(400).json({ error: 'Missing access token' });
     }
 
     logger.info('Starting to process and label user emails');
-    
+
     // Create Gmail client
     const { gmail, tryWithRefresh } = createGmailClient(accessToken);
-    
+
     // Fetch recent emails (limit to 50 for testing)
     const maxResults = 50;
     logger.info(`Fetching ${maxResults} recent emails for labeling`);
-    
+
     const threadsResponse = await gmail.users.threads.list({
       userId: 'me',
       maxResults,
       q: 'in:inbox' // Only inbox emails
     });
-    
+
     const threads = threadsResponse.data.threads || [];
     logger.info(`Found ${threads.length} email threads`);
-    
+
     // Process each thread to get email details
     const emails: EmailContent[] = [];
-    
+
     for (const thread of threads) {
       try {
         const threadResponse = await gmail.users.threads.get({
           userId: 'me',
           id: thread.id!
         });
-        
+
         const messages = threadResponse.data.messages || [];
         if (messages.length > 0) {
           const message = messages[0]; // Get the most recent message in thread
           const headers = message.payload?.headers || [];
-          
+
           const from = headers.find(h => h.name === 'From')?.value || '';
           const subject = headers.find(h => h.name === 'Subject')?.value || '';
           const body = he.decode(message.snippet || '');
-          
+
           emails.push({
             from,
             subject,
@@ -135,18 +135,18 @@ router.post('/process-user-emails', authMiddleware, async (req: AuthRequest, res
         // Continue with other threads
       }
     }
-    
+
     logger.info(`Processed ${emails.length} emails for labeling`);
-    
+
     // Label the emails using AI
     const labels = await AIService.labelEmailsBatch(emails);
-    
+
     // Combine emails with their labels
     const labeledEmails = emails.map((email, index) => ({
       ...email,
       label: labels[index]
     }));
-    
+
     return res.json({
       success: true,
       processed: emails.length,
@@ -163,7 +163,7 @@ router.post('/process-user-emails', authMiddleware, async (req: AuthRequest, res
       },
       timestamp: new Date().toISOString()
     });
-    
+
   } catch (error) {
     logger.error('Error processing user emails:', error);
     return res.status(500).json({ error: 'Failed to process emails' });
@@ -173,10 +173,10 @@ router.post('/process-user-emails', authMiddleware, async (req: AuthRequest, res
 // Helper function to create Gmail client with automatic token refresh
 const createGmailClient = (accessToken: string, refreshToken?: string) => {
   const oauth2Client = new google.auth.OAuth2();
-  
+
   // Try with current access token first
   oauth2Client.setCredentials({ access_token: accessToken });
-  
+
   // If that fails, try refreshing the token
   const tryWithRefresh = async () => {
     if (refreshToken) {
@@ -193,9 +193,9 @@ const createGmailClient = (accessToken: string, refreshToken?: string) => {
       throw new Error('No refresh token available - please log in again');
     }
   };
-  
+
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-  
+
   return { gmail, oauth2Client, tryWithRefresh };
 };
 
@@ -226,26 +226,26 @@ const sendEmailSchema = z.object({
 router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Response) => {
   try {
     const { accessToken } = req.user;
-    
+
     // Debug: Log what we have in req.user
     logger.info('User data from JWT:', req.user);
     logger.info('Access token:', accessToken);
-    
+
     if (!accessToken) {
       logger.error('No access token found in JWT payload');
       return res.status(401).json({ error: 'No access token available. Please log in again.' });
     }
-    
+
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-    
+
     // Build Gmail query based on category filter (like Gmail does)
     const searchQuery = req.query.q as string || '';
     const category = req.query.category as string;
     const maxResults = parseInt(req.query.maxResults as string) || 50; // Default 50 per category like Gmail
-    
+
     // Build category filter
     let categoryFilter = '';
     if (category && category !== 'all') {
@@ -253,6 +253,9 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
         // Primary = inbox emails that aren't categorized as promotions/updates/social
         // This matches Gmail's Primary tab behavior
         categoryFilter = 'in:inbox -category:promotions -category:updates -category:social';
+      } else if (category === 'sent') {
+        // Sent emails
+        categoryFilter = 'in:sent';
       } else {
         // For other categories (promotions, updates, social), use category filter
         categoryFilter = `in:inbox category:${category}`;
@@ -261,12 +264,12 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
       // Default: just inbox if no category specified
       categoryFilter = 'in:inbox';
     }
-    
+
     // Combine search query with category filter
-    const gmailQuery = searchQuery 
+    const gmailQuery = searchQuery
       ? `${categoryFilter} ${searchQuery}`
       : categoryFilter;
-    
+
     const response = await gmail.users.threads.list({
       userId: 'me',
       maxResults: maxResults,
@@ -275,7 +278,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
     });
 
     const threads = response.data.threads || [];
-    
+
     // Use batch requests to get thread metadata more efficiently
     const threadsWithPreview = await Promise.allSettled(
       threads.map(async (thread, index) => { // Process all 8 threads
@@ -283,23 +286,23 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
         if (index > 0) {
           await new Promise(resolve => setTimeout(resolve, 500)); // Reduced delay for better performance
         }
-        
+
         // Extract display name from "Display Name <email@domain.com>" format
         const extractDisplayName = (fromField: string): string => {
           if (!fromField) return '';
-          
+
           // If it's in "Display Name <email@domain.com>" format, extract the display name
           const match = fromField.match(/^"?(.*?)"?\s*<.*>$/);
           if (match && match[1]) {
             return match[1].trim();
           }
-          
+
           // If it's just an email address without display name, return the email
           const emailMatch = fromField.match(/^([^<]+)$/);
           if (emailMatch) {
             return emailMatch[1].trim();
           }
-          
+
           // Fallback to the original field
           return fromField;
         };
@@ -318,7 +321,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
           const messages = threadData.data.messages || [];
           const latestMessage = messages[messages.length - 1];
           const headers = latestMessage?.payload?.headers || [];
-          
+
           const from = headers.find(h => h.name === 'From')?.value || '';
           const subject = headers.find(h => h.name === 'Subject')?.value || '';
           const date = headers.find(h => h.name === 'Date')?.value || '';
@@ -326,7 +329,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
           // Get labels for the latest message to determine read status
           const labelIds = latestMessage?.labelIds || [];
           const isUnread = labelIds.includes('UNREAD');
-          
+
           // Debug logging
           logger.info(`Thread ${thread.id}: labelIds=${JSON.stringify(labelIds)}, isUnread=${isUnread}, read=${!isUnread}`);
 
@@ -362,7 +365,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
       .filter(result => result.status === 'fulfilled')
       .map(result => (result as PromiseFulfilledResult<any>).value);
 
-    return res.json({ 
+    return res.json({
       threads: successfulThreads,
       nextPageToken: response.data.nextPageToken,
       hasMore: !!response.data.nextPageToken
@@ -377,12 +380,12 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
 router.get('/labels', authMiddleware, async (req: AuthRequest, res: express.Response) => {
   try {
     const { accessToken } = req.user;
-    
+
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-    
+
     const response = await withTimeout(
       gmail.users.labels.list({
         userId: 'me',
@@ -391,7 +394,7 @@ router.get('/labels', authMiddleware, async (req: AuthRequest, res: express.Resp
     );
 
     const labels = response.data.labels || [];
-    
+
     // Transform labels to match our interface
     const transformedLabels = labels.map(label => ({
       id: label.id!,
@@ -413,27 +416,27 @@ router.get('/labels', authMiddleware, async (req: AuthRequest, res: express.Resp
 router.get('/threads/by-sender', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { sender } = req.query;
-    
+
     if (!sender || typeof sender !== 'string') {
       return res.status(400).json({ error: 'Sender name is required' });
     }
-    
+
     const { gmail, tryWithRefresh } = createGmailClient(req.user.accessToken, req.user.refreshToken);
-    
+
     // Search for emails from this sender - be more flexible with the search
     // Split the sender name into words and search for any of them
     const senderWords = sender.split(/\s+/).filter(word => word.length > 2);
-    let searchQuery = senderWords.length > 0 
+    let searchQuery = senderWords.length > 0
       ? `from:(${senderWords.join(' OR ')})`
       : `from:${sender}`;
-    
+
     // If no results, try a broader search
     if (sender.toLowerCase().includes('trader') || sender.toLowerCase().includes('broker')) {
       searchQuery = 'from:trader OR from:broker OR from:brokerage';
     }
-    
+
     logger.info(`Searching for emails with query: "${searchQuery}" from sender: "${sender}"`);
-    
+
     try {
       logger.info(`Making Gmail API call: threads.list with query: "${searchQuery}"`);
       logger.info(`Gmail client object:`, typeof gmail, gmail.users ? 'has users' : 'no users');
@@ -450,7 +453,7 @@ router.get('/threads/by-sender', authMiddleware, async (req: AuthRequest, res) =
       // Get the most recent thread from this sender
       const threadId = threadsResult.data.threads[0].id!;
       logger.info(`Found thread ID: ${threadId}, now fetching full thread details`);
-      
+
       const threadResult = await withTimeout(gmail.users.threads.get({
         userId: 'me',
         id: threadId,
@@ -467,10 +470,10 @@ router.get('/threads/by-sender', authMiddleware, async (req: AuthRequest, res) =
       const headers = latestMessage.payload?.headers || [];
       const fromHeader = headers.find(h => h.name?.toLowerCase() === 'from');
       const subjectHeader = headers.find(h => h.name?.toLowerCase() === 'subject');
-      
+
       // Extract message body
       const cleanBody = extractEmailBody(latestMessage.payload!);
-      
+
       const threadData = {
         id: threadId,
         subject: subjectHeader?.value || 'No Subject',
@@ -511,16 +514,16 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
   try {
     const { accessToken } = req.user;
     const { threadId } = req.params;
-    
+
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-    
+
     const response = await withTimeout(
       gmail.users.threads.get({
-      userId: 'me',
-      id: threadId,
+        userId: 'me',
+        id: threadId,
       }),
       20000 // 20 second timeout for detailed thread fetching
     );
@@ -534,122 +537,122 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
         // Extract display name from "Display Name <email@domain.com>" format
         const extractDisplayName = (fromField: string): string => {
           if (!fromField) return '';
-          
+
           // If it's in "Display Name <email@domain.com>" format, extract the display name
           const match = fromField.match(/^"?(.*?)"?\s*<.*>$/);
           if (match && match[1]) {
             return match[1].trim();
           }
-          
+
           // If it's just an email address without display name, return the email
           const emailMatch = fromField.match(/^([^<]+)$/);
           if (emailMatch) {
             return emailMatch[1].trim();
           }
-          
+
           // Fallback to the original field
           return fromField;
         };
 
         try {
-        const headers = message.payload?.headers || [];
-        const from = headers.find(h => h.name === 'From')?.value || '';
-        const subject = headers.find(h => h.name === 'Subject')?.value || '';
-        const date = headers.find(h => h.name === 'Date')?.value || '';
-        
-        const displayName = extractDisplayName(from);
-        
-        // Extract raw HTML body using our email processor
-        let rawBody = extractEmailBody(message.payload);
-        
-        // If no HTML body found, try to get plain text and convert to HTML
-        if (!rawBody && message.payload?.parts) {
-          const textPart = message.payload.parts.find(part => part.mimeType === 'text/plain');
-          if (textPart?.body?.data) {
-            const plainText = Buffer.from(textPart.body.data, 'base64').toString();
-            rawBody = plainText.replace(/\n/g, '<br>');
+          const headers = message.payload?.headers || [];
+          const from = headers.find(h => h.name === 'From')?.value || '';
+          const subject = headers.find(h => h.name === 'Subject')?.value || '';
+          const date = headers.find(h => h.name === 'Date')?.value || '';
+
+          const displayName = extractDisplayName(from);
+
+          // Extract raw HTML body using our email processor
+          let rawBody = extractEmailBody(message.payload);
+
+          // If no HTML body found, try to get plain text and convert to HTML
+          if (!rawBody && message.payload?.parts) {
+            const textPart = message.payload.parts.find(part => part.mimeType === 'text/plain');
+            if (textPart?.body?.data) {
+              const plainText = Buffer.from(textPart.body.data, 'base64').toString();
+              rawBody = plainText.replace(/\n/g, '<br>');
+            }
           }
-        }
-        
+
           // Process inline images with timeout
-        const inlineImages = findInlineImages(message.payload);
-        const attachmentMap = new Map<string, string>();
-        
+          const inlineImages = findInlineImages(message.payload);
+          const attachmentMap = new Map<string, string>();
+
           // Fetch inline image data with timeout
-        for (const img of inlineImages) {
-          try {
+          for (const img of inlineImages) {
+            try {
               const attachment = await withTimeout(
                 gmail.users.messages.attachments.get({
-              userId: 'me',
-              messageId: message.id!,
-              id: img.id,
+                  userId: 'me',
+                  messageId: message.id!,
+                  id: img.id,
                 }),
                 5000 // 5 second timeout for each attachment
               );
-            
-            if (attachment.data.data) {
-              // Create data URL for inline image
-              const mimeType = message.payload?.parts?.find(p => p.body?.attachmentId === img.id)?.mimeType || 'image/jpeg';
-              const dataUrl = `data:${mimeType};base64,${attachment.data.data}`;
-              attachmentMap.set(img.contentId, dataUrl);
-            }
-          } catch (error) {
-            logger.error(`Error fetching inline image ${img.id}:`, error);
-          }
-        }
-        
-        // Process the HTML content with inline images
-        let processedBody = processInlineImages(rawBody, attachmentMap);
-        
-        // Extract attachments from the message
-        const attachments: Array<{
-          id: string;
-          name: string;
-          mimeType: string;
-          size: number;
-        }> = [];
-        
-        const extractAttachments = (payload: any): void => {
-          if (payload.parts) {
-            for (const part of payload.parts) {
-              if (part.body?.attachmentId) {
-                attachments.push({
-                  id: part.body.attachmentId,
-                  name: part.filename || `attachment_${part.body.attachmentId}`,
-                  mimeType: part.mimeType || 'application/octet-stream',
-                  size: part.body.size || 0,
-                });
+
+              if (attachment.data.data) {
+                // Create data URL for inline image
+                const mimeType = message.payload?.parts?.find(p => p.body?.attachmentId === img.id)?.mimeType || 'image/jpeg';
+                const dataUrl = `data:${mimeType};base64,${attachment.data.data}`;
+                attachmentMap.set(img.contentId, dataUrl);
               }
-              // Recursively check nested parts
-              if (part.parts) {
-                extractAttachments(part);
-              }
+            } catch (error) {
+              logger.error(`Error fetching inline image ${img.id}:`, error);
             }
           }
-        };
-        
-        extractAttachments(message.payload);
-        
-        // Process the email HTML (sanitize, clean, format)
-        const processedResult = processEmailHtml({
-          html: processedBody,
-          shouldLoadImages: true, // Allow images by default
-          theme: 'light',
-        });
-        
-        return {
-          id: message.id,
-          from: displayName,
-          fromRaw: from, // Add original "From" field for email extraction
-          subject,
-          date,
-          body: processedResult.processedHtml,
-          rawBody: rawBody, // Keep original for debugging
-          plainTextContent: processedResult.plainTextContent,
-          hasBlockedImages: processedResult.hasBlockedImages,
-          snippet: he.decode(message.snippet || ''),
-          attachments: attachments.length > 0 ? attachments : undefined,
-        };
+
+          // Process the HTML content with inline images
+          let processedBody = processInlineImages(rawBody, attachmentMap);
+
+          // Extract attachments from the message
+          const attachments: Array<{
+            id: string;
+            name: string;
+            mimeType: string;
+            size: number;
+          }> = [];
+
+          const extractAttachments = (payload: any): void => {
+            if (payload.parts) {
+              for (const part of payload.parts) {
+                if (part.body?.attachmentId) {
+                  attachments.push({
+                    id: part.body.attachmentId,
+                    name: part.filename || `attachment_${part.body.attachmentId}`,
+                    mimeType: part.mimeType || 'application/octet-stream',
+                    size: part.body.size || 0,
+                  });
+                }
+                // Recursively check nested parts
+                if (part.parts) {
+                  extractAttachments(part);
+                }
+              }
+            }
+          };
+
+          extractAttachments(message.payload);
+
+          // Process the email HTML (sanitize, clean, format)
+          const processedResult = processEmailHtml({
+            html: processedBody,
+            shouldLoadImages: true, // Allow images by default
+            theme: 'light',
+          });
+
+          return {
+            id: message.id,
+            from: displayName,
+            fromRaw: from, // Add original "From" field for email extraction
+            subject,
+            date,
+            body: processedResult.processedHtml,
+            rawBody: rawBody, // Keep original for debugging
+            plainTextContent: processedResult.plainTextContent,
+            hasBlockedImages: processedResult.hasBlockedImages,
+            snippet: he.decode(message.snippet || ''),
+            attachments: attachments.length > 0 ? attachments : undefined,
+          };
         } catch (error) {
           logger.error(`Error processing message ${message.id}:`, error);
           // Return basic message info even if processing fails
@@ -691,17 +694,17 @@ router.get('/threads/:threadId', authMiddleware, async (req: AuthRequest, res: e
 router.post('/process', authMiddleware, async (req: AuthRequest, res: express.Response) => {
   try {
     const { html, shouldLoadImages = false, theme = 'light' } = req.body;
-    
+
     if (!html) {
       return res.status(400).json({ error: 'HTML content is required' });
     }
-    
+
     const result = processEmailHtml({
       html,
       shouldLoadImages,
       theme,
     });
-    
+
     return res.json(result);
   } catch (error) {
     logger.error('Error processing email content:', error);
@@ -714,17 +717,17 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res: express.Respo
   try {
     const { accessToken } = req.user;
     const { to, subject, body, threadId, attachments } = sendEmailSchema.parse(req.body);
-    
+
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-    
+
     // Generate a unique boundary for multipart MIME
     const boundary = `----=_NextPart_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     let emailContent = '';
-    
+
     if (attachments && attachments.length > 0) {
       // Multipart email with attachments
       emailContent = [
@@ -740,7 +743,7 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res: express.Respo
         body,
         '',
       ].join('\n');
-      
+
       // Add attachments
       for (const attachment of attachments) {
         emailContent += [
@@ -753,21 +756,21 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res: express.Respo
           '',
         ].join('\n');
       }
-      
+
       emailContent += `--${boundary}--\n`;
     } else {
       // Simple text email without attachments
       emailContent = [
-      `To: ${to}`,
-      `Subject: ${subject}`,
+        `To: ${to}`,
+        `Subject: ${subject}`,
         `Content-Type: text/plain; charset=UTF-8`,
-      '',
-      body,
+        '',
+        body,
       ].join('\n');
     }
-    
+
     const encodedEmail = Buffer.from(emailContent).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    
+
     const response = await gmail.users.messages.send({
       userId: 'me',
       requestBody: {
@@ -789,12 +792,12 @@ router.post('/threads/:threadId/read', authMiddleware, async (req: AuthRequest, 
   try {
     const { accessToken } = req.user;
     const { threadId } = req.params;
-    
+
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-    
+
     // First, get the thread to find all message IDs
     const threadResponse = await withTimeout(
       gmail.users.threads.get({
@@ -806,7 +809,7 @@ router.post('/threads/:threadId/read', authMiddleware, async (req: AuthRequest, 
 
     const thread = threadResponse.data;
     const messages = thread.messages || [];
-    
+
     // Remove UNREAD label from all messages in the thread
     const updatePromises = messages.map(async (message) => {
       try {
@@ -827,7 +830,7 @@ router.post('/threads/:threadId/read', authMiddleware, async (req: AuthRequest, 
     });
 
     await Promise.all(updatePromises);
-    
+
     logger.info(`Thread ${threadId} marked as read`);
     return res.json({ success: true });
   } catch (error) {
@@ -841,12 +844,12 @@ router.get('/messages/:messageId/attachments/:attachmentId', authMiddleware, asy
   try {
     const { accessToken } = req.user;
     const { messageId, attachmentId } = req.params;
-    
+
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-    
+
     const response = await withTimeout(
       gmail.users.messages.attachments.get({
         userId: 'me',
@@ -875,20 +878,20 @@ router.post('/classify', authMiddleware, async (req: AuthRequest, res: express.R
   try {
     const { accessToken } = req.user;
     const { threadIds } = req.body; // Array of thread IDs to classify
-    
+
     if (!Array.isArray(threadIds)) {
       return res.status(400).json({ error: 'threadIds must be an array' });
     }
-    
+
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-    
+
     // Get the latest message from each thread for classification
     const emailsToClassify: EmailContent[] = [];
     const threadMap = new Map<string, any>();
-    
+
     for (const threadId of threadIds) {
       try {
         const threadResponse = await withTimeout(
@@ -898,16 +901,16 @@ router.post('/classify', authMiddleware, async (req: AuthRequest, res: express.R
           }),
           5000
         );
-        
+
         const thread = threadResponse.data;
         const messages = thread.messages || [];
         const latestMessage = messages[messages.length - 1];
-        
+
         if (latestMessage) {
           const headers = latestMessage.payload?.headers || [];
           const subject = headers.find(h => h.name === 'Subject')?.value || '';
           const from = headers.find(h => h.name === 'From')?.value || '';
-          
+
           // Extract plain text body
           let body = '';
           if (latestMessage.payload?.parts) {
@@ -918,24 +921,24 @@ router.post('/classify', authMiddleware, async (req: AuthRequest, res: express.R
           } else if (latestMessage.payload?.body?.data) {
             body = Buffer.from(latestMessage.payload.body.data, 'base64').toString();
           }
-          
+
           emailsToClassify.push({
             subject,
             body,
             from,
             snippet: latestMessage.snippet || undefined,
           });
-          
+
           threadMap.set(threadId, latestMessage);
         }
       } catch (error) {
         logger.error(`Error fetching thread ${threadId}:`, error);
       }
     }
-    
+
     // Classify emails using AI (now includes both needs reply and important updates)
     const classifications = await AIService.classifyBatch(emailsToClassify);
-    
+
     // Map results back to thread IDs
     const results = threadIds.map((threadId, index) => ({
       threadId,
@@ -943,7 +946,7 @@ router.post('/classify', authMiddleware, async (req: AuthRequest, res: express.R
       isImportant: classifications[index]?.isImportant || false,
       confidence: classifications[index]?.confidence || 0,
     }));
-    
+
     logger.info(`Classified ${results.length} threads for needs reply and important updates`);
     return res.json({ classifications: results });
   } catch (error) {
@@ -959,12 +962,12 @@ const activeSummaryRequests = new Map<string, { res: express.Response, cancelled
 router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Response) => {
   const requestId = Math.random().toString(36).substring(7);
   activeSummaryRequests.set(requestId, { res, cancelled: false });
-  
+
   try {
     const { accessToken, refreshToken } = req.user;
-    
+
     const { gmail, tryWithRefresh } = createGmailClient(accessToken, refreshToken);
-    
+
     // Get threads (limit to 50 for summary)
     let threadsResponse;
     try {
@@ -980,7 +983,7 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Re
       if (error.code === 401 || error.response?.status === 401) {
         logger.info('Access token expired, attempting to refresh...');
         await tryWithRefresh();
-        
+
         // Retry the request with refreshed token
         threadsResponse = await withTimeout(
           gmail.users.threads.list({
@@ -995,7 +998,7 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Re
     }
 
     const threads = threadsResponse.data.threads || [];
-    
+
     // Get thread details
     const threadsWithDetails = await Promise.allSettled(
       threads.map(async (thread) => {
@@ -1013,7 +1016,7 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Re
           const messages = threadData.data.messages || [];
           const latestMessage = messages[messages.length - 1];
           const headers = latestMessage?.payload?.headers || [];
-          
+
           const from = headers.find(h => h.name === 'From')?.value || '';
           const subject = headers.find(h => h.name === 'Subject')?.value || '';
           const date = headers.find(h => h.name === 'Date')?.value || '';
@@ -1055,24 +1058,24 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Re
     }));
 
     const classifications = await AIService.classifyBatch(emailsToClassify);
-    
+
     // Check again if request was cancelled after classification
     if (requestInfo?.cancelled) {
       logger.info(`Summary request ${requestId} was cancelled after classification`);
       activeSummaryRequests.delete(requestId);
       return res.status(499).json({ error: 'Request cancelled' });
     }
-    
+
     // Generate summary
     const summary = await AIService.generateInboxSummary(validThreads, classifications);
-    
+
     // Check one more time before sending response
     if (requestInfo?.cancelled) {
       logger.info(`Summary request ${requestId} was cancelled before sending response`);
       activeSummaryRequests.delete(requestId);
       return res.status(499).json({ error: 'Request cancelled' });
     }
-    
+
     logger.info(`Generated inbox summary for ${validThreads.length} threads`);
     activeSummaryRequests.delete(requestId);
     return res.json({ summary });
@@ -1087,11 +1090,11 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res: express.Re
 router.post('/summary/cancel', authMiddleware, async (req: AuthRequest, res: express.Response) => {
   try {
     const { requestId } = req.body;
-    
+
     if (!requestId) {
       return res.status(400).json({ error: 'Request ID is required' });
     }
-    
+
     const requestInfo = activeSummaryRequests.get(requestId);
     if (requestInfo) {
       requestInfo.cancelled = true;
@@ -1110,27 +1113,27 @@ router.post('/summary/cancel', authMiddleware, async (req: AuthRequest, res: exp
 router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { sender } = req.query;
-    
+
     if (!sender || typeof sender !== 'string') {
       return res.status(400).json({ error: 'Sender name is required' });
     }
-    
+
     const { gmail, tryWithRefresh } = createGmailClient(req.user.accessToken, req.user.refreshToken);
-    
+
     // Search for emails from this sender - be more flexible with the search
     // Split the sender name into words and search for any of them
     const senderWords = sender.split(/\s+/).filter(word => word.length > 2);
-    let searchQuery = senderWords.length > 0 
+    let searchQuery = senderWords.length > 0
       ? `from:(${senderWords.join(' OR ')})`
       : `from:${sender}`;
-    
+
     // If no results, try a broader search
     if (sender.toLowerCase().includes('trader') || sender.toLowerCase().includes('broker')) {
       searchQuery = 'from:trader OR from:broker OR from:brokerage';
     }
-    
+
     logger.info(`Searching for emails with query: "${searchQuery}" from sender: "${sender}"`);
-    
+
     try {
       logger.info(`Making Gmail API call: threads.list with query: "${searchQuery}"`);
       logger.info(`Gmail client object:`, typeof gmail, gmail.users ? 'has users' : 'no users');
@@ -1147,7 +1150,7 @@ router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => 
       // Get the most recent thread from this sender
       const threadId = threadsResult.data.threads[0].id!;
       logger.info(`Found thread ID: ${threadId}, now fetching full thread details`);
-      
+
       const threadResult = await withTimeout(gmail.users.threads.get({
         userId: 'me',
         id: threadId,
@@ -1164,10 +1167,10 @@ router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => 
       const headers = latestMessage.payload?.headers || [];
       const fromHeader = headers.find(h => h.name?.toLowerCase() === 'from');
       const subjectHeader = headers.find(h => h.name?.toLowerCase() === 'subject');
-      
+
       // Extract message body
       const cleanBody = extractEmailBody(latestMessage.payload!);
-      
+
       const threadData = {
         id: threadId,
         subject: subjectHeader?.value || 'No Subject',
@@ -1207,13 +1210,13 @@ router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => 
 router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { threadId, instruction } = req.body;
-    
+
     if (!threadId || !instruction) {
       return res.status(400).json({ error: 'Thread ID and instruction are required' });
     }
-    
+
     const { gmail, tryWithRefresh } = createGmailClient(req.user.accessToken, req.user.refreshToken);
-    
+
     try {
       // Get the thread to understand context
       const threadResult = await withTimeout(gmail.users.threads.get({
@@ -1232,10 +1235,10 @@ router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => 
       const headers = latestMessage.payload?.headers || [];
       const fromHeader = headers.find(h => h.name?.toLowerCase() === 'from');
       const subjectHeader = headers.find(h => h.name?.toLowerCase() === 'subject');
-      
+
       // Extract the email body
       const cleanBody = extractEmailBody(latestMessage.payload!);
-      
+
       // Generate AI reply
       const replyContent = await AIService.generateContextualReply({
         originalEmail: {
@@ -1248,7 +1251,7 @@ router.post('/generate-reply', authMiddleware, async (req: AuthRequest, res) => 
       });
 
       logger.info(`Generated reply for thread ${threadId} with instruction: ${instruction}`);
-      return res.json({ 
+      return res.json({
         reply: replyContent,
         threadId: threadId,
         originalSubject: subjectHeader?.value || 'No Subject',
@@ -1282,7 +1285,7 @@ router.post('/generate-contextual-reply', authMiddleware, async (req: AuthReques
 
     const tryWithRefresh = async () => {
       const { gmail } = createGmailClient(req.user.accessToken, req.user.refreshToken);
-      
+
       // Get the thread to understand context
       const threadResponse = await gmail.users.threads.get({
         userId: 'me',
@@ -1297,7 +1300,7 @@ router.post('/generate-contextual-reply', authMiddleware, async (req: AuthReques
       // Get the latest message (the one to reply to)
       const latestMessage = thread.messages[thread.messages.length - 1];
       const payload = latestMessage.payload;
-      
+
       // Extract email content
       const fromHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'from');
       const subjectHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'subject');
@@ -1319,7 +1322,7 @@ router.post('/generate-contextual-reply', authMiddleware, async (req: AuthReques
       });
 
       logger.info(`Generated contextual reply for thread ${threadId}`);
-      return res.json({ 
+      return res.json({
         reply: replyContent,
         threadId: threadId,
         originalSubject: originalSubject,
@@ -1354,7 +1357,7 @@ router.post('/send-reply', authMiddleware, async (req: AuthRequest, res: express
 
     const tryWithRefresh = async () => {
       const { gmail } = createGmailClient(req.user.accessToken, req.user.refreshToken);
-      
+
       // Get the thread to get reply information
       const threadResponse = await gmail.users.threads.get({
         userId: 'me',
@@ -1369,12 +1372,12 @@ router.post('/send-reply', authMiddleware, async (req: AuthRequest, res: express
       // Get the latest message to reply to
       const latestMessage = thread.messages[thread.messages.length - 1];
       const payload = latestMessage.payload;
-      
+
       // Extract headers for reply
       const fromHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'from');
       const subjectHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'subject');
       const messageIdHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'message-id');
-      
+
       const toEmail = fromHeader?.value?.match(/<(.+)>/)?.[1] || fromHeader?.value || '';
       const originalSubject = subjectHeader?.value || '';
       const replySubject = originalSubject.startsWith('Re: ') ? originalSubject : `Re: ${originalSubject}`;
@@ -1403,7 +1406,7 @@ router.post('/send-reply', authMiddleware, async (req: AuthRequest, res: express
       });
 
       logger.info(`Reply sent successfully for thread ${threadId}, message ID: ${sendResponse.data.id}`);
-      return res.json({ 
+      return res.json({
         success: true,
         messageId: sendResponse.data.id,
         threadId: threadId,
@@ -1437,7 +1440,7 @@ router.post('/edit-reply', authMiddleware, async (req: AuthRequest, res: express
 
     const tryWithRefresh = async () => {
       const { gmail } = createGmailClient(req.user.accessToken, req.user.refreshToken);
-      
+
       // Get the thread to understand context
       const threadResponse = await gmail.users.threads.get({
         userId: 'me',
@@ -1452,7 +1455,7 @@ router.post('/edit-reply', authMiddleware, async (req: AuthRequest, res: express
       // Get the latest message (the one to reply to)
       const latestMessage = thread.messages[thread.messages.length - 1];
       const payload = latestMessage.payload;
-      
+
       // Extract email content
       const fromHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'from');
       const subjectHeader = payload?.headers?.find((h: any) => h.name?.toLowerCase() === 'subject');
@@ -1475,7 +1478,7 @@ router.post('/edit-reply', authMiddleware, async (req: AuthRequest, res: express
       });
 
       logger.info(`Generated edited reply for thread ${threadId} with feedback: ${editFeedback}`);
-      return res.json({ 
+      return res.json({
         reply: editedReply,
         threadId: threadId,
         originalSubject: originalSubject,
