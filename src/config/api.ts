@@ -157,7 +157,7 @@ export const API_CONFIG = {
     return getBackendURL();
   },
   ENDPOINTS: {
-    AUTH: {``
+    AUTH: {
       GOOGLE_URL: '/api/auth/google/url',
       GOOGLE_CALLBACK: '/api/auth/google/callback',
       REFRESH: '/api/auth/refresh',
