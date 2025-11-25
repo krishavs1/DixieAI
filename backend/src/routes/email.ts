@@ -284,7 +284,7 @@ router.get('/threads', authMiddleware, async (req: AuthRequest, res: express.Res
       threads.map(async (thread, index) => { // Process all 8 threads
         // Add delay between requests to avoid overwhelming Gmail API
         if (index > 0) {
-          await new Promise(resolve => setTimeout(resolve, 500)); // Reduced delay for better performance
+          await new Promise(resolve => setTimeout(resolve, 50)); // Reduced to 50ms for faster loading
         }
 
         // Extract display name from "Display Name <email@domain.com>" format
