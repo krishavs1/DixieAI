@@ -371,6 +371,9 @@ const HomeScreen = () => {
   };
 
   const handleCategoryChange = (category: EmailCategory) => {
+    // Clear threads immediately to show loading state
+    setThreads([]);
+    setOriginalThreads([]);
     setCurrentCategory(category);
   };
 
@@ -407,6 +410,9 @@ const HomeScreen = () => {
   };
 
   const selectCategoryFromSidePanel = (category: EmailCategory) => {
+    // Clear threads immediately to show loading state
+    setThreads([]);
+    setOriginalThreads([]);
     setCurrentCategory(category);
     toggleSidePanel();
   };
